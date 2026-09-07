@@ -45,20 +45,20 @@ def run(
         return _run_show(arguments[1:])
     parser = argparse.ArgumentParser(
         prog="reverse-google-flights",
-        description="Run a bounded batch of Google Flights browser searches.",
+        description="Search Google Flights in bounded batches.",
         epilog=(
             "Other commands: filter, summary, list, show. "
-            "Run `reverse-google-flights COMMAND --help` for command-specific help."
+            "Run reverse-google-flights COMMAND --help for details."
         ),
     )
     parser.add_argument("input", nargs="?", default="-", help="JSON file, or - for stdin")
     parser.add_argument(
         "--cache-dir",
         type=Path,
-        help="provider cache directory; defaults to the managed store",
+        help="provider cache directory; defaults to the app-managed cache",
     )
-    parser.add_argument("--output", type=Path, help="write the JSON report to this file")
-    parser.add_argument("--full", action="store_true", help="print the full report to stdout")
+    parser.add_argument("--output", type=Path, help="save the full JSON report to this file")
+    parser.add_argument("--full", action="store_true", help="write the full report to stdout")
     args = parser.parse_args(arguments)
     try:
         text = (

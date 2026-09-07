@@ -71,7 +71,7 @@ class FliProvider:
         if spec.additional_segments:
             raise ProviderError(
                 "provider_unsupported",
-                "The fli provider does not support additional_segments. Use the browser provider.",
+                "The fli provider cannot search additional_segments; use the browser provider.",
             )
         try:
             from fli.models import (
@@ -88,7 +88,7 @@ class FliProvider:
         except ImportError as exc:
             raise ProviderError(
                 "provider_unavailable",
-                "Install optional fli support with `pip install 'reverse-google-flights[fli]'`.",
+                "The flights dependency is missing. Install reverse-google-flights[fli].",
             ) from exc
 
         try:
@@ -136,7 +136,7 @@ class FliProvider:
                 if not client.responses or not _has_wrb_payload(client.responses[-1]):
                     raise ProviderError(
                         "provider_response_error",
-                        "Google Flights returned a null or unreadable response envelope",
+                        "Google Flights returned a null or unreadable response envelope.",
                         retryable=True,
                         requests_made=client.requests_made,
                     )
@@ -268,7 +268,7 @@ class BrowserProvider:
         except ImportError as exc:
             raise ProviderError(
                 "browser_provider_unavailable",
-                "Browser dependencies are missing. Reinstall reverse-google-flights.",
+                "Browser dependencies are missing; reinstall reverse-google-flights.",
             ) from exc
 
         query, requested_segments = _build_browser_query(
@@ -371,7 +371,7 @@ async def _open_search_page(
             await page.close()
             raise ProviderError(
                 "consent_required",
-                "Google consent page did not offer a Reject all action.",
+                "The Google consent page has no Reject all button.",
                 coverage=coverage,
                 requests_made=coverage.browser_transitions,
             )
@@ -1006,7 +1006,7 @@ def _parse_provider_final_total(body: str, currency: str) -> float:
     except StopIteration:
         raise ProviderError(
             "browser_parse_error",
-            "The booking page has no bounded itinerary summary.",
+            "The booking page has no parseable itinerary summary.",
             requests_made=1,
         ) from None
     symbol = {"EUR": "€", "USD": "$", "GBP": "£"}.get(currency)

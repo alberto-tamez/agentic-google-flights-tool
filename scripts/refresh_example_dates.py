@@ -38,13 +38,13 @@ def _shift_dates(value: Any, offset: timedelta) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Shift all checked-in flight examples while preserving date gaps."
+        description="Move checked-in flight dates while preserving the gaps between them."
     )
     parser.add_argument(
         "--first-departure",
         type=date.fromisoformat,
         default=date.today() + timedelta(days=45),
-        help="new earliest date in YYYY-MM-DD form; defaults to 45 days from today",
+        help="earliest date in YYYY-MM-DD form; defaults to 45 days from today",
     )
     args = parser.parse_args()
 
