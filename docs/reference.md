@@ -1,6 +1,6 @@
 # Technical reference
 
-Read this when you need field definitions, retrieval limits, storage behavior, or Python examples. For the main workflow, start with the [agent guide](agent-guide.md). Commands below run from the repository root.
+Read this when you need field definitions, retrieval limits, storage behavior, or Python examples. For the main workflow, start with the [agent guide](agent-guide.md). CLI commands work after package installation. Commands using repository examples or scripts require a checkout. The Python API keeps its compatible `reverse_google_flights` import name.
 
 ## Install
 
@@ -21,13 +21,13 @@ uv sync --extra dev --extra fli
 Start with one search:
 
 ```sh
-uv run advanced-google-flights-tool examples/search-one.json
+agentic-flights examples/search-one.json
 ```
 
 Then run the 50-search example if you want to exercise batching:
 
 ```sh
-uv run advanced-google-flights-tool examples/searches-50.json
+agentic-flights examples/searches-50.json
 ```
 
 The command stores the full report in the managed cache. Standard output contains an `rgf_...` run ID, counts, coverage, five short previews, and commands for reading the saved results. Use `--output PATH` to keep a separate export; the automatic cleanup never removes explicit exports. Use `--full` to write the complete report to standard output.
@@ -43,7 +43,7 @@ Multi-leg discovery returns first-stage `outbound_choice` records with `ticket_s
 Filter and rank a saved report without another Google request:
 
 ```sh
-uv run advanced-google-flights-tool list RUN_ID --filters - --page-size 5 <<'JSON'
+agentic-flights list RUN_ID --filters - --page-size 5 <<'JSON'
 {"max_price": 150, "max_total_stops": 0, "limit": 5}
 JSON
 ```
@@ -53,9 +53,9 @@ Local filters support request IDs, price, total duration, total stops, airline n
 Inspect a saved report without printing the full JSON:
 
 ```sh
-uv run advanced-google-flights-tool summary RUN_ID
-uv run advanced-google-flights-tool list RUN_ID --page-size 5
-uv run advanced-google-flights-tool show RUN_ID RESULT_ID
+agentic-flights summary RUN_ID
+agentic-flights list RUN_ID --page-size 5
+agentic-flights show RUN_ID RESULT_ID
 ```
 
 `list` filters before pagination and returns at most 20 slim records. Its cursor binds the dataset contents, filter, sort order, and offset. `show` accepts at most ten stable result IDs and is the only default view that returns full fare evidence and booking URLs. Use `summary SOURCE --full` for an explicit full export.

@@ -3,6 +3,36 @@ revision = 1
 requires-python = ">=3.11"
 
 [[package]]
+name = "agentic-google-flights-tool"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fast-flights" },
+    { name = "playwright" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+fli = [
+    { name = "flights" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fast-flights", specifier = "==3.1.0" },
+    { name = "flights", marker = "extra == 'fli'", specifier = "==0.9.0" },
+    { name = "playwright", specifier = ">=1.62,<2" },
+    { name = "pydantic", specifier = ">=2.10,<3" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<9" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
+]
+provides-extras = ["fli", "dev"]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -650,36 +680,6 @@ name = "ratelimit"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ab/38/ff60c8fc9e002d50d48822cc5095deb8ebbc5f91a6b8fdd9731c87a147c9/ratelimit-2.2.1.tar.gz", hash = "sha256:af8a9b64b821529aca09ebaf6d8d279100d766f19e90b5059ac6a718ca6dee42", size = 5251 }
-
-[[package]]
-name = "advanced-google-flights-tool"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "fast-flights" },
-    { name = "playwright" },
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-fli = [
-    { name = "flights" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fast-flights", specifier = "==3.1.0" },
-    { name = "flights", marker = "extra == 'fli'", specifier = "==0.9.0" },
-    { name = "playwright", specifier = ">=1.62,<2" },
-    { name = "pydantic", specifier = ">=2.10,<3" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<9" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
-]
-provides-extras = ["fli", "dev"]
 
 [[package]]
 name = "rich"

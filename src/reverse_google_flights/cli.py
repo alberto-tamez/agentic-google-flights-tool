@@ -5,6 +5,7 @@ import hashlib
 import json
 import sys
 from collections.abc import Sequence
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,8 @@ def run(
     provider_factory: Any = None,
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
+    if arguments and arguments[0] == "guide":
+        return _run_guide(arguments[1:])
     if arguments and arguments[0] == "filter":
         return _run_filter(arguments[1:])
     if arguments and arguments[0] == "summary":
@@ -44,11 +47,11 @@ def run(
     if arguments and arguments[0] == "show":
         return _run_show(arguments[1:])
     parser = argparse.ArgumentParser(
-        prog="reverse-google-flights",
+        prog="agentic-flights",
         description="Search Google Flights in bounded batches.",
         epilog=(
-            "Other commands: filter, summary, list, show. "
-            "Run reverse-google-flights COMMAND --help for details."
+            "Start with: agentic-flights guide. Other commands: filter, summary, list, show. "
+            "Run agentic-flights COMMAND --help for details."
         ),
     )
     parser.add_argument("input", nargs="?", default="-", help="JSON file, or - for stdin")
@@ -123,6 +126,25 @@ def run(
                 "max_bytes": 100 * 1024 * 1024,
             }
         print(json.dumps(manifest, indent=2))
+    return 0
+
+
+def _run_guide(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(prog="agentic-flights guide")
+    parser.add_argument(
+        "topic", nargs="?", default="start", choices=["start", "reference", "schema"]
+    )
+    args = parser.parse_args(argv)
+    if args.topic == "schema":
+        print(json.dumps(BatchInput.model_json_schema(), indent=2))
+    else:
+        name = "reference.md" if args.topic == "reference" else "agent-guide.md"
+        resource = files("reverse_google_flights").joinpath("_docs", name)
+        if resource.is_file():
+            print(resource.read_text(encoding="utf-8"))
+        else:
+            # Source checkouts use the same canonical files that the wheel bundles.
+            print((Path(__file__).resolve().parents[2] / "docs" / name).read_text())
     return 0
 
 
