@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "reverse-google-flights"
+name = "advanced-google-flights-tool"
 version = "0.1.0"
 description = "Run bounded, cached Google Flights searches through browser automation"
 readme = "README.md"
@@ -39,6 +39,7 @@ Repository = "https://github.com/alberto-tamez/reverse-google-flights"
 Issues = "https://github.com/alberto-tamez/reverse-google-flights/issues"
 
 [project.scripts]
+advanced-google-flights-tool = "reverse_google_flights.cli:main"
 reverse-google-flights = "reverse_google_flights.cli:main"
 
 [tool.hatch.build.targets.wheel]
