@@ -6,11 +6,28 @@ Give your agent a trip goal. It can search combinations, compare the results in 
 
 ## Give this to your AI
 
-> Use [Advanced Google Flights Tool](https://github.com/alberto-tamez/reverse-google-flights) and follow its [agent guide](https://github.com/alberto-tamez/reverse-google-flights/blob/main/docs/agent-guide.md).
->
-> Find flights from Madrid or Barcelona to Japan for 12–15 nights next October. Compare Tokyo and Osaka, with at most one stop. Show me the cheapest options and any worthwhile upgrades in travel time. Search up to 100 route/date combinations. Verify the finalists and tell me what you searched and what remains unchecked.
+Copy this prompt, replace the bracketed trip details, and paste it into an AI agent with terminal or Python access. The agent can handle setup and searching.
 
-Replace the airports, dates, and preferences with your own. Your agent needs a terminal or Python execution environment. The project provides a Python API and CLI; an MCP server is not included yet.
+```text
+Use Advanced Google Flights Tool to find flights for my trip.
+
+Repository: https://github.com/alberto-tamez/reverse-google-flights
+Start by reading the agent guide:
+https://github.com/alberto-tamez/reverse-google-flights/blob/main/docs/agent-guide.md
+
+Set up the project if needed, then follow the guide.
+My trip: [where I'm flying from and to, dates or flexibility, trip length,
+number of travelers, and any budget, baggage, or stop requirements].
+
+Search up to 100 route/date combinations. Compare results in code and keep
+full reports out of the chat. Show me a short list of the cheapest options
+and worthwhile time-saving alternatives. Verify the finalists, include
+available booking links, and tell me what remains unchecked. Do not book.
+```
+
+For example, your trip could be: “Madrid or Barcelona to Tokyo or Osaka, 12–15 nights in October 2027, one adult, at most one stop, with an overhead cabin bag.”
+
+The project provides a Python API and CLI; an MCP server is not included yet.
 
 ## Get started
 
