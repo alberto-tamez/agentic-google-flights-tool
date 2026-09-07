@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentflight"
+name = "agentic-flights"
 version = "0.1.0"
 description = "Flight search for AI agents, powered by Agentic Flights"
 readme = "README.md"
@@ -15,8 +15,5 @@ dependencies = ["agentic-google-flights-tool==0.1.0"]
 [project.urls]
 Repository = "https://github.com/alberto-tamez/agentic-google-flights-tool"
 
-[project.scripts]
-agentflight = "reverse_google_flights.cli:main"
-
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentflight"]
+packages = ["src/agentic_flights_alias"]
