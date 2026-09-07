@@ -89,12 +89,19 @@ class BatchExecutor:
                 )
 
         resolved = [outcome for outcome in outcomes if outcome is not None]
+        report = self.summarize(resolved)
+        report.counts.unique_searches = len(grouped)
+        return report
+
+    def summarize(self, outcomes: Iterable[SearchOutcome]) -> BatchReport:
+        """Build a report from saved outcomes without making provider requests."""
+        resolved = list(outcomes)
         counts = BatchCounts(
             total=len(resolved),
             success=sum(outcome.status == "success" for outcome in resolved),
             empty=sum(outcome.status == "empty" for outcome in resolved),
             error=sum(outcome.status == "error" for outcome in resolved),
-            unique_searches=len(grouped),
+            unique_searches=len(resolved),
             network_requests=sum(outcome.requests_made for outcome in resolved),
             cache_hits=sum(outcome.cached for outcome in resolved),
         )

@@ -1,4 +1,5 @@
 from reverse_google_flights.batch import BatchExecutor
+from reverse_google_flights.exploration import Exploration, ExplorationProgress, SearchSpace
 from reverse_google_flights.filtering import ShortlistReport, ShortlistSpec, build_shortlist
 from reverse_google_flights.models import (
     BaggageAllowance,
@@ -19,6 +20,9 @@ from reverse_google_flights.models import (
 __all__ = [
     "BatchExecutor",
     "BatchReport",
+    "Exploration",
+    "ExplorationProgress",
+    "SearchSpace",
     "BaggageAllowance",
     "BaggageStatus",
     "Cabin",

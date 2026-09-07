@@ -80,6 +80,68 @@ For agent-driven multi-leg work, discover route and date queries first, apply up
 
 Set `overhead_cabin_bags` to the requested number of overhead cabin bags. With `require_overhead_cabin_bag: true`, the selected fare passes only when its seller option or selected-flight summary states that carry-on baggage is included for the entire trip. Missing evidence, extra-cost baggage, and personal-item-only allowances fail the filter with a structured error.
 
+## Programmatic trip exploration
+
+`SearchSpace` expands airport choices, an inclusive departure window, and optional
+stay lengths into exact searches. `space.count` previews the work without opening
+a browser. Airport lists are normalized and deduplicated; same-airport routes are
+excluded. This first API supports one-way and round-trip spaces with at most
+100,000 combinations. Supply explicit airport codes; city resolution and adaptive
+search allocation are not implemented.
+
+```python
+from datetime import date, timedelta
+
+from reverse_google_flights import BatchExecutor, Exploration, SearchSpace, SearchSpec
+from reverse_google_flights.cache import FileCache
+from reverse_google_flights.provider import BrowserProvider
+from reverse_google_flights.store import ManagedStore
+
+departure = date.today() + timedelta(days=60)
+space = SearchSpace(
+    template=SearchSpec(
+        request_id="template", origin="MAD", destination="NRT",
+        departure_date=departure, currency="EUR", language="en", country="ES",
+        search_mode="discover",
+    ),
+    origins=["MAD", "BCN"], destinations=["NRT", "HND", "KIX"],
+    departure_start=departure, departure_end=departure + timedelta(days=6),
+    min_nights=12, max_nights=15,
+)
+assert space.count == 168
+store = ManagedStore()
+store.initialize()
+executor = BatchExecutor(
+    FileCache(store.provider_cache / "browser", namespace=BrowserProvider.version),
+    max_workers=2,
+)
+exploration = Exploration(space, executor, store)
+progress = exploration.advance(search_budget=20)
+print(progress.model_dump_json())  # Counts, run ID, and at most five previews.
+
+# A later process can reconstruct the same configuration and continue.
+progress = exploration.advance(resume_from=progress.run_id, search_budget=20)
+```
+
+Each call attempts at most `search_budget` combinations, including cache hits,
+with a maximum of 500. This is a query budget, not a browser-transition or elapsed
+time limit. Template settings still bound the work inside each query. Full results
+stay in the managed store; use the existing `list` and `show` commands with the
+returned run ID to inspect them without another Google request.
+
+Each completed batch produces an immutable snapshot containing all outcomes so
+far. Save the latest run ID to resume. Reusing an older ID branches from that
+snapshot; it does not advance a shared job. An interruption before a batch returns
+can require replaying that batch, with available successful cache entries reused.
+Managed-store expiration still applies, and snapshots retain their original fare
+observations. Changed search-space or provider-namespace settings reject resume.
+
+Failures count as attempted and remain in the report. `search_space_exhausted`
+means every defined query was attempted, even if some failed; it does not mean
+every available fare was retrieved. Retry failed queries or verify shortlisted
+queries separately through `BatchExecutor`. MCP transport and automatic finalist
+selection are not part of this API yet.
+
 ## Limits
 
 Google Flights does not publish a consumer search API. Both providers depend on undocumented behavior that Google can change. Each browser result records `observed_at`; it is a dated observation and does not guarantee the fare. Confirm the price, baggage rules, and availability with the seller before purchase. The browser parser reads English result labels even when the request specifies another language tag.
