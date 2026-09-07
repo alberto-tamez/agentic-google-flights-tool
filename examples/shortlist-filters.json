@@ -1,0 +1,16 @@
+{
+  "request_ids": [
+    "mad-lhr-broad"
+  ],
+  "max_price": 150,
+  "max_duration_minutes": 240,
+  "max_total_stops": 0,
+  "earliest_departure_hour": 6,
+  "latest_departure_hour": 20,
+  "sort_by": [
+    "price",
+    "duration",
+    "departure"
+  ],
+  "limit": 5
+}

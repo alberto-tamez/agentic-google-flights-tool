@@ -1,0 +1,46 @@
+{
+  "provider": "browser",
+  "max_workers": 1,
+  "cache_ttl_seconds": 3600,
+  "ranking_limit": 5,
+  "searches": [
+    {
+      "request_id": "round-trip-with-cabin-bag",
+      "origin": "MAD",
+      "destination": "LIS",
+      "departure_date": "2027-01-21",
+      "return_date": "2027-01-28",
+      "cabin": "economy",
+      "max_stops": "non_stop",
+      "adults": 1,
+      "overhead_cabin_bags": 1,
+      "require_overhead_cabin_bag": true,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES",
+      "max_results": 1
+    },
+    {
+      "request_id": "open-jaw-with-cabin-bag",
+      "origin": "MAD",
+      "destination": "CDG",
+      "departure_date": "2026-11-18",
+      "additional_segments": [
+        {
+          "origin": "AMS",
+          "destination": "MAD",
+          "departure_date": "2026-11-25"
+        }
+      ],
+      "cabin": "economy",
+      "max_stops": "one_stop_or_fewer",
+      "adults": 1,
+      "overhead_cabin_bags": 1,
+      "require_overhead_cabin_bag": true,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES",
+      "max_results": 1
+    }
+  ]
+}

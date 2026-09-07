@@ -1,0 +1,63 @@
+{
+  "provider": "browser",
+  "max_workers": 1,
+  "cache_ttl_seconds": 3600,
+  "ranking_limit": 10,
+  "searches": [
+    {
+      "request_id": "mad-lhr-broad",
+      "origin": "MAD",
+      "destination": "LHR",
+      "departure_date": "2027-01-21",
+      "cabin": "economy",
+      "max_stops": "any",
+      "adults": 1,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES",
+      "search_mode": "discover",
+      "retrieval_limit": 250,
+      "load_more_clicks": 1
+    },
+    {
+      "request_id": "mad-lhr-upstream-filtered",
+      "origin": "MAD",
+      "destination": "LHR",
+      "departure_date": "2027-01-21",
+      "cabin": "economy",
+      "max_stops": "non_stop",
+      "adults": 1,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES",
+      "max_price": 200,
+      "segment_filters": {
+        "airlines": [
+          "IB"
+        ],
+        "earliest_departure_hour": 7,
+        "latest_departure_hour": 18,
+        "max_duration_minutes": 180
+      },
+      "search_mode": "discover",
+      "retrieval_limit": 250,
+      "load_more_clicks": 1
+    },
+    {
+      "request_id": "mad-lis-round-trip-discovery",
+      "origin": "MAD",
+      "destination": "LIS",
+      "departure_date": "2027-01-21",
+      "return_date": "2027-01-28",
+      "cabin": "economy",
+      "max_stops": "one_stop_or_fewer",
+      "adults": 1,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES",
+      "search_mode": "discover",
+      "retrieval_limit": 100,
+      "load_more_clicks": 1
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "provider": "browser",
+  "max_workers": 1,
+  "cache_ttl_seconds": 3600,
+  "ranking_limit": 5,
+  "searches": [
+    {
+      "request_id": "quickstart",
+      "origin": "MAD",
+      "destination": "LIS",
+      "departure_date": "2026-10-28",
+      "cabin": "economy",
+      "max_stops": "one_stop_or_fewer",
+      "adults": 1,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES",
+      "max_results": 3
+    }
+  ]
+}

@@ -1,0 +1,261 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from reverse_google_flights.batch import BatchExecutor
+from reverse_google_flights.cache import FileCache
+from reverse_google_flights.filtering import ShortlistSpec
+from reverse_google_flights.models import SearchSpec
+from reverse_google_flights.provider import BrowserProvider, FliProvider
+from reverse_google_flights.store import ManagedStore, StoreError
+from reverse_google_flights.views import compact_summary, list_page, load_report, show_results
+
+
+class BatchInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    searches: list[SearchSpec] = Field(min_length=1, max_length=500)
+    max_workers: int = Field(default=2, ge=1, le=5)
+    cache_ttl_seconds: int = Field(default=3600, ge=0)
+    ranking_limit: int = Field(default=10, ge=1, le=50)
+    provider: str = "browser"
+
+
+def run(
+    argv: Sequence[str] | None = None,
+    *,
+    provider_factory: Any = None,
+) -> int:
+    arguments = list(argv) if argv is not None else sys.argv[1:]
+    if arguments and arguments[0] == "filter":
+        return _run_filter(arguments[1:])
+    if arguments and arguments[0] == "summary":
+        return _run_summary(arguments[1:])
+    if arguments and arguments[0] == "list":
+        return _run_list(arguments[1:])
+    if arguments and arguments[0] == "show":
+        return _run_show(arguments[1:])
+    parser = argparse.ArgumentParser(
+        prog="reverse-google-flights",
+        description="Run a bounded batch of Google Flights browser searches.",
+        epilog=(
+            "Other commands: filter, summary, list, show. "
+            "Run `reverse-google-flights COMMAND --help` for command-specific help."
+        ),
+    )
+    parser.add_argument("input", nargs="?", default="-", help="JSON file, or - for stdin")
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        help="provider cache directory; defaults to the managed store",
+    )
+    parser.add_argument("--output", type=Path, help="write the JSON report to this file")
+    parser.add_argument("--full", action="store_true", help="print the full report to stdout")
+    args = parser.parse_args(arguments)
+    try:
+        text = (
+            sys.stdin.read()
+            if args.input == "-"
+            else Path(args.input).read_text(encoding="utf-8")
+        )
+        raw = json.loads(text)
+        if isinstance(raw, list):
+            raw = {"searches": raw}
+        batch_input = BatchInput.model_validate(raw)
+        providers = {"browser": BrowserProvider, "fli": FliProvider}
+        if batch_input.provider not in providers:
+            raise ValueError("provider must be 'browser' or 'fli'")
+        selected_factory = provider_factory or providers[batch_input.provider]
+        namespace = getattr(selected_factory, "version", batch_input.provider)
+        store = ManagedStore()
+        if args.cache_dir is None:
+            store.initialize()
+            cache_root = store.provider_cache
+        else:
+            cache_root = args.cache_dir
+        cache = FileCache(
+            cache_root / batch_input.provider,
+            ttl_seconds=batch_input.cache_ttl_seconds,
+            namespace=namespace,
+        )
+        kwargs: dict[str, Any] = {}
+        kwargs["provider_factory"] = selected_factory
+        report = BatchExecutor(
+            cache,
+            max_workers=batch_input.max_workers,
+            ranking_limit=batch_input.ranking_limit,
+            **kwargs,
+        ).execute(batch_input.searches)
+    except (OSError, json.JSONDecodeError, ValidationError, ValueError) as exc:
+        error = {"error": {"code": "invalid_input", "message": str(exc)}}
+        print(json.dumps(error), file=sys.stderr)
+        return 2
+    report_json = report.model_dump_json(indent=2) + "\n"
+    run_id = None
+    if args.output:
+        artifact = args.output
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text(report_json, encoding="utf-8")
+        reference = str(artifact)
+    else:
+        run_id, artifact = store.save(report_json)
+        reference = run_id
+    if args.full:
+        print(report_json, end="")
+    else:
+        checksum = hashlib.sha256(report_json.encode()).hexdigest()
+        manifest = compact_summary(
+            report, checksum, artifact, reference=reference
+        )
+        if run_id:
+            manifest["managed_store"] = {
+                "run_id": run_id,
+                "idle_ttl_days": 7,
+                "max_runs": 50,
+                "max_bytes": 100 * 1024 * 1024,
+            }
+        print(json.dumps(manifest, indent=2))
+    return 0
+
+
+def _run_filter(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="reverse-google-flights filter",
+        description="Filter and rank a saved flight report without network access.",
+    )
+    parser.add_argument("source", help="managed run ID or saved batch report JSON")
+    parser.add_argument("filters", help="shortlist filter JSON file, or - for stdin")
+    parser.add_argument("--output", type=Path, help="write the shortlist JSON to this file")
+    args = parser.parse_args(argv)
+    try:
+        source_path, reference = ManagedStore().resolve(args.source)
+        source, checksum = load_report(source_path)
+        filters = ShortlistSpec.model_validate_json(_read_text(args.filters))
+        report = list_page(
+            source,
+            checksum,
+            source_path,
+            filters,
+            page_size=filters.limit,
+            cursor=None,
+            reference=reference,
+        )
+        report_json = json.dumps(report, indent=2)
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(report_json + "\n", encoding="utf-8")
+        else:
+            print(report_json)
+        return 0
+    except (OSError, ValidationError, ValueError) as exc:
+        error = {"error": {"code": "invalid_filter_input", "message": str(exc)}}
+        print(json.dumps(error), file=sys.stderr)
+        return 2
+
+
+def _run_summary(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(prog="reverse-google-flights summary")
+    parser.add_argument("source")
+    parser.add_argument("--full", action="store_true")
+    args = parser.parse_args(argv)
+    try:
+        source_path, reference = ManagedStore().resolve(args.source)
+        source, checksum = load_report(source_path)
+        if args.full:
+            print(source_path.read_text(encoding="utf-8"), end="")
+        else:
+            print(
+                json.dumps(
+                    compact_summary(
+                        source, checksum, source_path, reference=reference
+                    ),
+                    indent=2,
+                )
+            )
+        return 0
+    except (OSError, ValidationError, ValueError) as exc:
+        return _print_view_error(exc)
+
+
+def _run_list(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(prog="reverse-google-flights list")
+    parser.add_argument("source")
+    parser.add_argument("--filters", help="filter JSON file, or - for stdin")
+    parser.add_argument("--page-size", type=int, default=5)
+    parser.add_argument("--cursor")
+    args = parser.parse_args(argv)
+    try:
+        source_path, reference = ManagedStore().resolve(args.source)
+        source, checksum = load_report(source_path)
+        filters = (
+            ShortlistSpec.model_validate_json(_read_text(args.filters))
+            if args.filters
+            else ShortlistSpec()
+        )
+        report = list_page(
+            source,
+            checksum,
+            source_path,
+            filters,
+            page_size=args.page_size,
+            cursor=args.cursor,
+            reference=reference,
+        )
+        print(json.dumps(report, indent=2))
+        return 0
+    except (OSError, ValidationError, ValueError) as exc:
+        return _print_view_error(exc)
+
+
+def _run_show(argv: Sequence[str]) -> int:
+    parser = argparse.ArgumentParser(prog="reverse-google-flights show")
+    parser.add_argument("source")
+    parser.add_argument("result_ids", nargs="+")
+    args = parser.parse_args(argv)
+    try:
+        source_path, reference = ManagedStore().resolve(args.source)
+        source, checksum = load_report(source_path)
+        print(
+            json.dumps(
+                show_results(
+                    source,
+                    checksum,
+                    source_path,
+                    args.result_ids,
+                    reference=reference,
+                ),
+                indent=2,
+            )
+        )
+        return 0
+    except (OSError, ValidationError, ValueError) as exc:
+        return _print_view_error(exc)
+
+
+def _print_view_error(exc: Exception) -> int:
+    code = exc.code if isinstance(exc, StoreError) else "invalid_view_request"
+    print(
+        json.dumps({"error": {"code": code, "message": str(exc)}}),
+        file=sys.stderr,
+    )
+    return 2
+
+
+def _read_text(source: str) -> str:
+    return sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
+
+
+def main() -> None:
+    raise SystemExit(run())
+
+
+if __name__ == "__main__":
+    main()
