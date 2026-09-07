@@ -19,10 +19,10 @@ For example: “Madrid or Barcelona to Japan for about two weeks in October 2027
 
 ## Install
 
-Requires Python 3.11 or newer. Install the Python package from GitHub:
+Requires Python 3.11 or newer. Install the Python package from PyPI:
 
 ```sh
-python -m pip install "git+https://github.com/alberto-tamez/agentic-google-flights-tool.git"
+python -m pip install agentic-google-flights-tool
 ```
 
 Then read the included instructions:
