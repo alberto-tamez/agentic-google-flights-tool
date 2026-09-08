@@ -51,7 +51,7 @@ skill unless you pass `--force`.
   different city or to a different airport.
 - Explore nearby airports, dates, and stay lengths; filter by price, stops, airline,
   time, duration, and overhead cabin bag.
-- Save and resume searches, keep currencies separate, and compare price against time.
+- Compare price against travel time without mixing different currencies.
 - Check the current total price, same-flight match, baggage rules, and booking links.
 - Say when it could not read a flight, stopped early, or still has work to do.
 

@@ -2,6 +2,10 @@
 
 This project uses semantic versioning once releases begin.
 
+## 0.4.3
+
+- Removed saved-run implementation details from the user-facing capability list.
+
 ## 0.4.2
 
 - Replaced travel and agent jargon in the README, installed skill, and agent guide
