@@ -131,10 +131,25 @@ def _run_guide(argv: Sequence[str]) -> int:
         "topic",
         nargs="?",
         default="start",
-        choices=["start", "reference", "schema", "space", "search", "filters", "operations"],
+        choices=[
+            "start",
+            "reference",
+            "schema",
+            "space",
+            "search",
+            "filters",
+            "operations",
+            "plan",
+            "explore",
+            "compare",
+            "alternatives",
+            "inspect",
+            "verify",
+            "issues",
+        ],
     )
     args = parser.parse_args(argv)
-    if args.topic in {"space", "search", "filters", "operations"}:
+    if args.topic not in {"start", "reference", "schema"}:
         from reverse_google_flights.api import AgentAPI
 
         print(json.dumps(AgentAPI().schema(args.topic), indent=2))

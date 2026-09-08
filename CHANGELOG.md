@@ -2,6 +2,17 @@
 
 This project uses semantic versioning once releases begin.
 
+## 0.3.0
+
+- Added consistent API progress and executable next actions; exploration summaries
+  are now top-level, matching verification responses.
+- Exposed actionable MCP validation errors, operation schemas, and query diagnostics.
+- Kept partial outbound observations separate from complete-ticket comparisons.
+- Labeled baggage coverage for the whole requested trip and preserved airline codes.
+- Returned precise matching quote IDs and deduplicated verification selections.
+- Made empty selections no-ops and paginated tradeoff results.
+- Updated the installed workflow to handle empty, failed, and blocked searches.
+
 ## 0.2.1
 
 - Return blocked state for failed branch frontiers instead of retrying them forever.

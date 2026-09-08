@@ -7,7 +7,8 @@ useful alternatives with evidence. After installation, no repository checkout is
 
 Use Python 3.11+ and install `agentic-google-flights-tool`. Use an installed Google
 Chrome or run `python -m playwright install chromium`. Read `agentic-flights guide reference` for the complete Python example. Load `agentic-flights guide space`,
-`search`, or `filters` for only the schema you need; `operations` lists the API.
+`search`, or `filters` for only the schema you need; `operations` lists the API. For operation inputs, use `agentic-flights guide verify`
+or the corresponding operation name; class introspection is unnecessary.
 
 ## Plan and explore
 
@@ -48,11 +49,20 @@ for current final prices and baggage. It reports whether the observed itinerary
 matched; it must not silently substitute another flight. An outbound-only match
 proves only the selected outbound, not a specific return choice. Matching uses the
 route, local times, airline and flight number where known, not a provider booking ID.
+Inspect `matching_result_ids` to retrieve the exact matching quotes.
 If a match is pending, continue its saved run. If it is absent, report that clearly.
 
 Never sum independent one-way fares and label them a complete ticket. A complete
 quote requires `complete_single_ticket` and `provider_final_total`. Hard cabin-bag
 requirements reject unknown or extra-cost baggage and require whole-trip evidence.
+
+## Handle responses
+
+Use the common `progress.can_continue` and `progress.coverage_complete` fields.
+Follow executable `next_actions` when helpful. Read `issues` for failed or blocked
+queries instead of dumping all results. Empty selections are valid no-ops; if no
+options match, report that rather than assuming a booking is available. MCP errors
+return `ok=false` with field-level validation and a suggested repair action.
 
 ## Return a decision
 

@@ -27,9 +27,11 @@ def compact_summary(
     if preview_limit < 0:
         raise ValueError("preview_limit must be non-negative")
     flattened = _flatten(source)
-    grouped: dict[str, list[RankedFlight]] = {}
+    grouped: dict[tuple[str, str, str], list[RankedFlight]] = {}
     for item in flattened:
-        grouped.setdefault(item.option.currency, []).append(item)
+        grouped.setdefault(
+            (item.option.currency, item.option.ticket_scope, item.option.result_scope), []
+        ).append(item)
     for items in grouped.values():
         items.sort(
             key=lambda x: (
@@ -63,8 +65,8 @@ def compact_summary(
         "coverage": coverage,
         "coverage_outcomes_omitted": max(0, len(source.outcomes) - len(coverage)),
         "error_codes": dict(sorted(error_codes.items())),
-        "currencies": sorted(grouped),
-        "preview_order": "price_within_currency_round_robin",
+        "currencies": sorted({item.option.currency for item in flattened}),
+        "preview_order": "price_within_currency_and_ticket_scope_round_robin",
         "coverage_totals": {
             "source_candidates_loaded": sum(
                 o.coverage.source_candidates_loaded for o in source.outcomes
@@ -154,8 +156,7 @@ def show_results(
     *,
     reference: str | None = None,
 ) -> dict[str, Any]:
-    if not result_ids:
-        raise ValueError("show requires at least one result ID")
+    result_ids = list(dict.fromkeys(result_ids))
     indexed = {_result_id(item): item for item in _flatten(source)}
     specs = {o.request_id: o.search_spec for o in source.outcomes}
     missing = [result_id for result_id in result_ids if result_id not in indexed]
@@ -218,6 +219,17 @@ def _result_id(item: RankedFlight) -> str:
 
 def _slim(item: RankedFlight, spec: SearchSpec | None = None) -> dict[str, Any]:
     option = item.option
+    required = (
+        set(range(len(spec.requested_segments())))
+        if spec
+        else {leg.journey_index for leg in option.legs}
+    )
+    bag = option.baggage
+    whole_trip_bag = bool(
+        bag
+        and required.issubset(set(bag.applies_to_journeys))
+        and (spec is not None or option.result_scope != "outbound_choice")
+    )
     return {
         "result_id": _result_id(item),
         "request_id": item.request_id,
@@ -227,11 +239,23 @@ def _slim(item: RankedFlight, spec: SearchSpec | None = None) -> dict[str, Any]:
         "duration_minutes": option.duration_minutes,
         "total_stops": option.stops,
         "airlines": list(
-            dict.fromkeys(leg.airline_name for leg in option.legs if leg.airline_name)
+            dict.fromkeys(
+                leg.airline_name or leg.airline_code
+                for leg in option.legs
+                if leg.airline_name or leg.airline_code
+            )
         ),
         "departure_at": option.legs[0].departure_at.isoformat(),
         "ticket_scope": option.ticket_scope,
-        "baggage_status": option.baggage.status if option.baggage else "unknown",
+        "result_scope": option.result_scope,
+        "price_provenance": option.price_provenance,
+        "observed_at": option.observed_at.isoformat(),
+        "baggage_status": bag.status if whole_trip_bag else "unknown",
+        "baggage_evidence_scope": "whole_trip"
+        if whole_trip_bag
+        else "partial"
+        if bag
+        else "unknown",
         "requested_departure_date": spec.departure_date.isoformat() if spec else None,
         "requested_return_date": (
             spec.return_date.isoformat() if spec and spec.return_date else None

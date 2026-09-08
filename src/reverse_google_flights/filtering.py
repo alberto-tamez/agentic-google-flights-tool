@@ -108,7 +108,7 @@ def collect_matches(source: BatchReport, filters: ShortlistSpec) -> FilterCollec
     for outcome in selected_outcomes:
         for option in outcome.options:
             evaluated += 1
-            failures, missing = _evaluate(option, filters, airline_filters)
+            failures, missing = _evaluate(option, filters, airline_filters, outcome.search_spec)
             for name in failures:
                 rejected[name] = rejected.get(name, 0) + 1
             for name in missing:
@@ -169,6 +169,7 @@ def _evaluate(
     option: FlightOption,
     filters: ShortlistSpec,
     airline_filters: set[str],
+    spec: SearchSpec | None = None,
 ) -> tuple[set[str], set[str]]:
     failures: set[str] = set()
     unknown: set[str] = set()
@@ -207,8 +208,16 @@ def _evaluate(
             failures.add(name)
     if filters.require_overhead_cabin_bag:
         baggage = option.baggage
-        journey_count = len({leg.journey_index for leg in option.legs})
-        if baggage is None or baggage.status == "unknown":
+        journey_count = (
+            len(spec.requested_segments())
+            if spec
+            else len({leg.journey_index for leg in option.legs})
+        )
+        if (
+            baggage is None
+            or baggage.status == "unknown"
+            or (spec is None and option.result_scope == "outbound_choice")
+        ):
             unknown.add("overhead_cabin_bag")
         elif baggage.status != "included" or baggage.applies_to_journeys != list(
             range(journey_count)
@@ -229,4 +238,10 @@ def _sort_key(item: RankedFlight, sort_by: list[SortKey]) -> tuple:
         SortKey.STOPS: option.stops,
         SortKey.DEPARTURE: option.legs[0].departure_at.isoformat(),
     }
-    return (*[values[key] for key in sort_by], item.request_id, option.provider_rank)
+    return (
+        option.ticket_scope,
+        option.result_scope,
+        *[values[key] for key in sort_by],
+        item.request_id,
+        option.provider_rank,
+    )
