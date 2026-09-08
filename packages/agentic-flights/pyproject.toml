@@ -4,13 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-flights"
-version = "0.1.0"
+version = "0.2.0"
 description = "Flight search for AI agents, powered by Agentic Flights"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "Alberto Tamez Gonzalez"}]
-dependencies = ["agentic-google-flights-tool==0.1.0"]
+dependencies = ["agentic-google-flights-tool==0.2.0"]
+
+[project.optional-dependencies]
+mcp = ["agentic-google-flights-tool[mcp]==0.2.0"]
 
 [project.urls]
 Repository = "https://github.com/alberto-tamez/agentic-google-flights-tool"

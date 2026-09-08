@@ -23,10 +23,10 @@ from reverse_google_flights.views import compact_summary, list_page, load_report
 class BatchInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    searches: list[SearchSpec] = Field(min_length=1, max_length=500)
-    max_workers: int = Field(default=2, ge=1, le=5)
+    searches: list[SearchSpec] = Field(min_length=1)
+    max_workers: int = Field(default=2, ge=1)
     cache_ttl_seconds: int = Field(default=3600, ge=0)
-    ranking_limit: int = Field(default=10, ge=1, le=50)
+    ranking_limit: int = Field(default=10, ge=10)
     provider: str = "browser"
 
 
@@ -65,9 +65,7 @@ def run(
     args = parser.parse_args(arguments)
     try:
         text = (
-            sys.stdin.read()
-            if args.input == "-"
-            else Path(args.input).read_text(encoding="utf-8")
+            sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8")
         )
         raw = json.loads(text)
         if isinstance(raw, list):
@@ -115,9 +113,7 @@ def run(
         print(report_json, end="")
     else:
         checksum = hashlib.sha256(report_json.encode()).hexdigest()
-        manifest = compact_summary(
-            report, checksum, artifact, reference=reference
-        )
+        manifest = compact_summary(report, checksum, artifact, reference=reference)
         if run_id:
             manifest["managed_store"] = {
                 "run_id": run_id,
@@ -132,10 +128,17 @@ def run(
 def _run_guide(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="agentic-flights guide")
     parser.add_argument(
-        "topic", nargs="?", default="start", choices=["start", "reference", "schema"]
+        "topic",
+        nargs="?",
+        default="start",
+        choices=["start", "reference", "schema", "space", "search", "filters", "operations"],
     )
     args = parser.parse_args(argv)
-    if args.topic == "schema":
+    if args.topic in {"space", "search", "filters", "operations"}:
+        from reverse_google_flights.api import AgentAPI
+
+        print(json.dumps(AgentAPI().schema(args.topic), indent=2))
+    elif args.topic == "schema":
         print(json.dumps(BatchInput.model_json_schema(), indent=2))
     else:
         name = "reference.md" if args.topic == "reference" else "agent-guide.md"
@@ -196,9 +199,7 @@ def _run_summary(argv: Sequence[str]) -> int:
         else:
             print(
                 json.dumps(
-                    compact_summary(
-                        source, checksum, source_path, reference=reference
-                    ),
+                    compact_summary(source, checksum, source_path, reference=reference),
                     indent=2,
                 )
             )

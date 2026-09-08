@@ -3,6 +3,8 @@
 .ruff_cache/
 **/__pycache__/
 artifacts/
+# Local agent evaluations: benchmark scripts, raw results, and reports.
+/artifacts/agent-eval/
 .coverage
 .DS_Store
 build/

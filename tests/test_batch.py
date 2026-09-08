@@ -52,7 +52,7 @@ def test_fifty_items_are_bounded_and_isolated(tmp_path, future_date) -> None:
 
     assert [item.request_id for item in report.outcomes] == [item.request_id for item in specs]
     assert tracker.peak == 5
-    assert len(tracker.instances) == 50
+    assert len(tracker.instances) == 5  # one reusable provider per worker
     assert report.counts.network_requests == 50
 
 

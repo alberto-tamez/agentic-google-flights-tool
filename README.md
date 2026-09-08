@@ -143,6 +143,17 @@ print(report.model_dump_json(indent=2))
 
 For flexible-date exploration, multi-city inputs, filtering, retrieval limits, cache behavior, and complete-ticket verification, read the [technical reference](docs/reference.md).
 
+## Connect through MCP
+
+```sh
+python -m pip install "agentic-google-flights-tool[mcp]"
+agentic-flights-mcp
+```
+
+Use stdio, or add `--transport streamable-http` for local HTTP. The adapter exposes
+planning, resumable exploration, comparison, inspection, and verification through
+saved run IDs. Agents can load input schemas on demand with `schema`.
+
 ## Limits and responsible use
 
 Google Flights does not publish a consumer search API. This project depends on undocumented page behavior and may need updates when Google changes it. Search results are dated observations, not reservations or price guarantees.

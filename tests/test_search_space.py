@@ -45,10 +45,10 @@ def test_invalid_spaces(future_date, updates):
         space_for(future_date, **updates)
 
 
-def test_rejects_oversized_space_and_multi_city_template(future_date):
-    with pytest.raises(ValueError, match="100000"):
-        space_for(future_date, departure_end=future_date + timedelta(days=365),
-                  min_nights=0, max_nights=365)
+def test_large_spaces_are_valid_but_multi_city_templates_are_rejected(future_date):
+    large = space_for(future_date, departure_end=future_date + timedelta(days=365),
+                      min_nights=0, max_nights=365)
+    assert large.count > 100000
     with pytest.raises(ValueError, match="one-way template"):
         space_for(future_date, template=make_spec("t", future_date, return_date=future_date))
 
@@ -99,6 +99,6 @@ def test_resume_survives_new_instances_and_preserves_failures(tmp_path, future_d
 def test_budget_validation_before_execution(tmp_path, future_date):
     runner = Exploration(space_for(future_date), BatchExecutor(FileCache(tmp_path / "c")),
                          ManagedStore(tmp_path / "s"))
-    for budget in [0, 501, True, 1.5]:
+    for budget in [0, True, 1.5]:
         with pytest.raises(ValueError, match="search_budget"):
             runner.advance(search_budget=budget)

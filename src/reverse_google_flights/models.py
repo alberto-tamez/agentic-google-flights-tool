@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
 
 
 class Cabin(StrEnum):
@@ -32,12 +32,12 @@ class BaggageStatus(StrEnum):
 class SegmentFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    airlines: list[str] = Field(default_factory=list, max_length=20)
+    airlines: list[str] = Field(default_factory=list)
     earliest_departure_hour: int | None = Field(default=None, ge=0, le=23)
     latest_departure_hour: int | None = Field(default=None, ge=0, le=23)
     earliest_arrival_hour: int | None = Field(default=None, ge=0, le=23)
     latest_arrival_hour: int | None = Field(default=None, ge=0, le=23)
-    max_duration_minutes: int | None = Field(default=None, ge=1, le=10_000)
+    max_duration_minutes: int | None = Field(default=None, ge=1)
 
     @field_validator("airlines")
     @classmethod
@@ -45,8 +45,7 @@ class SegmentFilters(BaseModel):
         normalized = [value.upper() for value in values]
         alliances = {"ONEWORLD", "SKYTEAM", "STAR_ALLIANCE"}
         if any(
-            value not in alliances
-            and not (len(value) == 2 and value.isascii() and value.isalnum())
+            value not in alliances and not (len(value) == 2 and value.isascii() and value.isalnum())
             for value in normalized
         ):
             raise ValueError("airlines must contain IATA codes or alliance identifiers")
@@ -95,7 +94,7 @@ class SearchSpec(BaseModel):
     destination: str
     departure_date: date
     return_date: date | None = None
-    additional_segments: list[SearchSegment] = Field(default_factory=list, max_length=4)
+    additional_segments: list[SearchSegment] = Field(default_factory=list)
     segment_filters: SegmentFilters = Field(default_factory=SegmentFilters)
     return_segment_filters: SegmentFilters = Field(default_factory=SegmentFilters)
     cabin: Cabin = Cabin.ECONOMY
@@ -106,15 +105,19 @@ class SearchSpec(BaseModel):
     currency: str
     language: str = Field(min_length=2, max_length=35)
     country: str
-    max_results: int = Field(default=10, ge=1, le=50)
+    max_results: int | None = Field(default=None, ge=1)
     max_price: int | None = Field(default=None, ge=1)
-    retrieval_limit: int = Field(default=250, ge=1, le=500)
-    load_more_clicks: int = Field(default=1, ge=0, le=3)
+    retrieval_limit: int | None = Field(default=None, ge=1)
+    load_more_clicks: int | None = Field(default=None, ge=0)
     search_mode: Literal["discover", "verify"] = "verify"
-    stage_candidate_offsets: list[int] = Field(default_factory=list, max_length=5)
-    candidates_per_stage: int = Field(default=2, ge=1, le=5)
-    max_complete_quotes: int = Field(default=4, ge=1, le=20)
-    max_browser_transitions: int = Field(default=24, ge=1, le=100)
+    stage_candidate_offsets: list[int] = Field(default_factory=list)
+    candidates_per_stage: int | None = Field(default=None, ge=1)
+    max_complete_quotes: int | None = Field(default=None, ge=1)
+    max_browser_transitions: int | None = Field(default=None, ge=1)
+
+    # None means unbounded; finite limits schedule a resumable work chunk.
+    continuation: dict[str, Any] | None = None
+    preferred_outbound: dict[str, Any] | None = None
 
     @field_validator("origin", "destination")
     @classmethod
@@ -166,9 +169,7 @@ class SearchSpec(BaseModel):
                 "overhead_cabin_bags must be at least 1 when require_overhead_cabin_bag is true"
             )
         if self.search_mode == "discover" and self.require_overhead_cabin_bag:
-            raise ValueError(
-                "discover mode cannot require verified overhead cabin baggage"
-            )
+            raise ValueError("discover mode cannot require verified overhead cabin baggage")
         if any(offset < 0 for offset in self.stage_candidate_offsets):
             raise ValueError("stage_candidate_offsets cannot contain negative values")
         return self
@@ -260,7 +261,12 @@ class SearchCoverage(BaseModel):
     source_parse_failure_samples: list[str] = Field(default_factory=list, max_length=3)
     source_load_more_clicks: int = Field(default=0, ge=0)
     source_load_stop_reason: Literal[
-        "not_applicable", "ui_exhausted", "click_budget", "retrieval_limit", "load_error"
+        "not_applicable",
+        "ui_exhausted",
+        "click_budget",
+        "retrieval_limit",
+        "load_error",
+        "transition_budget",
     ] = "not_applicable"
     source_truncated: bool = False
     candidates_seen: int = Field(default=0, ge=0)
@@ -275,12 +281,17 @@ class SearchCoverage(BaseModel):
     browser_transitions: int = Field(default=0, ge=0)
     budget_exhausted: bool = False
     fully_explored: bool = False
+    last_source_truncated: bool = Field(default=False, exclude=True)
+    retries: int = Field(default=0, ge=0)
+    pending_branches: int = Field(default=0, ge=0)
+    continuation: dict[str, Any] | None = None
 
 
 class SearchOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     request_id: str
+    search_spec: SearchSpec | None = None
     status: Literal["success", "empty", "error"]
     options: list[FlightOption] = Field(default_factory=list)
     error: SearchError | None = None
@@ -319,6 +330,7 @@ class BatchCounts(BaseModel):
 class BatchReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    exploration_state: dict[str, Any] | None = None
     outcomes: list[SearchOutcome]
     counts: BatchCounts
     ranked_by_currency: dict[str, list[RankedFlight]]

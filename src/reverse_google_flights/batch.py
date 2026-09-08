@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
+from queue import Empty, SimpleQueue
 from time import monotonic
 
 from reverse_google_flights.cache import FileCache
@@ -28,10 +30,14 @@ class BatchExecutor:
         ranking_limit: int = 10,
         provider_factory: ProviderFactory = BrowserProvider,
     ) -> None:
-        if not 1 <= max_workers <= 5:
-            raise ValueError("max_workers must be between 1 and 5")
-        if not 1 <= ranking_limit <= 50:
-            raise ValueError("ranking_limit must be between 1 and 50")
+        if isinstance(max_workers, bool) or not isinstance(max_workers, int) or max_workers < 1:
+            raise ValueError("max_workers must be a positive integer")
+        if (
+            isinstance(ranking_limit, bool)
+            or not isinstance(ranking_limit, int)
+            or ranking_limit < 1
+        ):
+            raise ValueError("ranking_limit must be a positive integer")
         self.cache = cache
         self.max_workers = max_workers
         self.ranking_limit = ranking_limit
@@ -54,6 +60,7 @@ class BatchExecutor:
             for index, spec in members:
                 outcomes[index] = SearchOutcome(
                     request_id=spec.request_id,
+                    search_spec=spec,
                     status=cached.status,
                     options=cached.options,
                     cached=True,
@@ -63,18 +70,20 @@ class BatchExecutor:
                 )
 
         completed: dict[str, SearchOutcome] = {}
-        with ThreadPoolExecutor(
-            max_workers=self.max_workers,
-            thread_name_prefix="reverse-flights",
-        ) as executor:
-            futures: dict[Future[SearchOutcome], tuple[str, SearchSpec]] = {
-                executor.submit(self._search_one, spec): (key, spec) for key, spec in misses
-            }
-            for future, (key, spec) in futures.items():
-                outcome = future.result()
-                completed[key] = outcome
-                if outcome.status in {"success", "empty"}:
-                    self.cache.put(spec, outcome.status, outcome.options, outcome.coverage)
+        pending: SimpleQueue[tuple[str, SearchSpec]] = SimpleQueue()
+        for item in misses:
+            pending.put(item)
+        if misses:
+            with ThreadPoolExecutor(
+                max_workers=min(self.max_workers, len(misses)),
+                thread_name_prefix="reverse-flights",
+            ) as executor:
+                workers = [
+                    executor.submit(self._run_worker, pending)
+                    for _ in range(min(self.max_workers, len(misses)))
+                ]
+                for worker in workers:
+                    completed.update(worker.result())
 
         for key, members in grouped.items():
             source = completed.get(key)
@@ -84,6 +93,7 @@ class BatchExecutor:
                 outcomes[index] = source.model_copy(
                     update={
                         "request_id": spec.request_id,
+                        "search_spec": spec,
                         "requests_made": source.requests_made if offset == 0 else 0,
                     }
                 )
@@ -111,12 +121,44 @@ class BatchExecutor:
             ranked_by_currency=self._rank(resolved),
         )
 
-    def _search_one(self, spec: SearchSpec) -> SearchOutcome:
+    def _run_worker(self, pending: SimpleQueue[tuple[str, SearchSpec]]) -> dict[str, SearchOutcome]:
+        completed: dict[str, SearchOutcome] = {}
+        provider: Provider | None = None
+        try:
+            while True:
+                try:
+                    key, spec = pending.get_nowait()
+                except Empty:
+                    break
+                if provider is None:
+                    try:
+                        provider = self.provider_factory()
+                    except Exception:
+                        # _search_one translates construction failures into per-query errors.
+                        pass
+                outcome = self._search_one(spec, provider)
+                completed[key] = outcome
+                if outcome.status in {"success", "empty"}:
+                    self.cache.put(spec, outcome.status, outcome.options, outcome.coverage)
+        finally:
+            if provider is not None:
+                close = getattr(provider, "close", None)
+                if close is not None:
+                    try:
+                        close()
+                    except Exception as exc:
+                        logging.getLogger(__name__).warning(
+                            "Provider cleanup failed: %s", type(exc).__name__
+                        )
+        return completed
+
+    def _search_one(self, spec: SearchSpec, provider: Provider | None = None) -> SearchOutcome:
         started = monotonic()
         try:
-            result = self.provider_factory().search(spec)
+            result = (provider if provider is not None else self.provider_factory()).search(spec)
             return SearchOutcome(
                 request_id=spec.request_id,
+                search_spec=spec,
                 status=result.status,
                 options=result.options,
                 elapsed_ms=_elapsed_ms(started),
@@ -126,6 +168,7 @@ class BatchExecutor:
         except ProviderError as exc:
             return SearchOutcome(
                 request_id=spec.request_id,
+                search_spec=spec,
                 status="error",
                 error=SearchError(
                     code=exc.code,
@@ -140,6 +183,7 @@ class BatchExecutor:
         except Exception as exc:
             return SearchOutcome(
                 request_id=spec.request_id,
+                search_spec=spec,
                 status="error",
                 error=SearchError(
                     code="internal_error",

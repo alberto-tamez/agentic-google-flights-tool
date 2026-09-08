@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-from asyncio import run
+from asyncio import Runner, wait_for
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -234,64 +235,112 @@ def _normalize_option(raw: Any, rank: int, fallback_currency: str) -> FlightOpti
 
 _RESULT_SELECTOR = 'div[role="link"][aria-label*="Select flight"]'
 _RESULT_RE = re.compile(
-    r"^From (?P<price>[\d.,]+) .+?\.\s*"
+    r"^(?:From (?P<price>[\d.,]+) .+?\.|Total price is unavailable\.)\s*"
     r"(?P<stops>Nonstop|\d+ stops?) flight with (?P<airline>.+?)\.\s*"
     r"(?:Operated by .+?\.\s*)?Leaves (?P<origin_name>.+?) at "
     r"(?P<departure_time>\d{1,2}:\d{2} [AP]M) on (?P<departure_date>.+?) "
     r"and arrives at (?P<destination_name>.+?) at "
     r"(?P<arrival_time>\d{1,2}:\d{2} [AP]M) on (?P<arrival_date>.+?)\.\s*"
-    r"Total duration (?:(?P<hours>\d+) hr )?(?P<minutes>\d+) min\.",
+    r"Total duration (?:(?P<hours>\d+) hr)?\s*(?:(?P<minutes>\d+) min)?\.",
 )
 
 
 class BrowserProvider:
-    version = "browser-playwright-v5"
+    version = "browser-playwright-v6"
+
+    def __init__(self) -> None:
+        self._runner = Runner()
+        self._playwright = None
+        self._browser = None
 
     def search(self, spec: SearchSpec) -> ProviderResult:
+        # One retry recovers a transient navigation/DOM replacement; repeated
+        # failures return evidence to the caller instead of looping indefinitely.
+        spent = 0
+        for attempt in range(2):
+            current = spec
+            if spec.max_browser_transitions is not None:
+                current = spec.model_copy(
+                    update={"max_browser_transitions": spec.max_browser_transitions - spent}
+                )
+            try:
+                result = self._runner.run(self._search(current))
+                result.coverage.retries += attempt
+                result.coverage.browser_transitions += spent
+                return ProviderResult(
+                    result.status, result.options, result.requests_made + spent, result.coverage
+                )
+            except ProviderError as exc:
+                exc.requests_made += spent
+                exc.coverage.browser_transitions += spent
+                exc.coverage.retries += attempt
+                raise
+            except Exception as exc:
+                transient = any(
+                    word in str(exc).lower()
+                    for word in ("not attached", "detached", "timeout", "net::err", "closed")
+                )
+                failed_coverage = getattr(exc, "search_coverage", SearchCoverage())
+                spent += failed_coverage.browser_transitions
+                if (
+                    transient
+                    and attempt == 0
+                    and (
+                        spec.max_browser_transitions is None or spent < spec.max_browser_transitions
+                    )
+                ):
+                    continue
+                failed_coverage.browser_transitions = spent
+                failed_coverage.retries += attempt
+                raise ProviderError(
+                    "browser_provider_error",
+                    str(exc) or type(exc).__name__,
+                    retryable=transient,
+                    details={"exception_type": type(exc).__name__},
+                    requests_made=spent,
+                    coverage=failed_coverage,
+                ) from exc
+        raise AssertionError("unreachable")
+
+    def close(self) -> None:
+        self._runner.run(self._close())
+        self._runner.close()
+
+    async def _close(self) -> None:
         try:
-            return run(self._search(spec))
-        except ProviderError:
-            raise
-        except Exception as exc:
-            raise ProviderError(
-                "browser_provider_error",
-                str(exc) or type(exc).__name__,
-                retryable=True,
-                details={"exception_type": type(exc).__name__},
-                requests_made=1,
-            ) from exc
+            if self._browser is not None:
+                await self._browser.close()
+        finally:
+            if self._playwright is not None:
+                await self._playwright.stop()
+            self._browser = self._playwright = None
 
     async def _search(self, spec: SearchSpec) -> ProviderResult:
-        try:
-            from fast_flights import FlightQuery, Passengers, create_query
-            from playwright.async_api import async_playwright
-        except ImportError as exc:
-            raise ProviderError(
-                "browser_provider_unavailable",
-                "Browser dependencies are missing; reinstall reverse-google-flights.",
-            ) from exc
+        from fast_flights import FlightQuery, Passengers, create_query
+        from playwright.async_api import async_playwright
 
-        query, requested_segments = _build_browser_query(
-            spec, FlightQuery, Passengers, create_query
+        query, segments = _build_browser_query(spec, FlightQuery, Passengers, create_query)
+        kind = (
+            "discovery"
+            if spec.search_mode == "discover"
+            or (len(segments) == 1 and not spec.require_overhead_cabin_bag)
+            else "tree"
         )
-
-        async with async_playwright() as playwright:
+        _read_continuation(spec, kind)
+        if self._browser is None or not self._browser.is_connected():
+            await self._close()
+            self._playwright = await async_playwright().start()
             try:
-                browser = await playwright.chromium.launch(channel="chrome", headless=True)
-            except Exception:
-                browser = await playwright.chromium.launch(headless=True)
-            try:
-                if spec.search_mode == "discover" or (
-                    len(requested_segments) == 1 and not spec.require_overhead_cabin_bag
-                ):
-                    return await _search_discovery_browser(
-                        browser, query.url(), spec, requested_segments
-                    )
-                return await _explore_complete_tickets(
-                    browser, query.url(), spec, len(requested_segments)
+                self._browser = await self._playwright.chromium.launch(
+                    channel="chrome", headless=True
                 )
-            finally:
-                await browser.close()
+            except Exception:
+                self._browser = await self._playwright.chromium.launch(headless=True)
+        if spec.search_mode == "discover" or (
+            len(segments) == 1 and not spec.require_overhead_cabin_bag
+        ):
+            return await _search_discovery_browser(self._browser, query.url(), spec, segments)
+        return await _explore_complete_tickets(self._browser, query.url(), spec, len(segments))
 
 
 def _build_browser_query(
@@ -353,7 +402,10 @@ class _BudgetExhausted(Exception):
 
 
 def _consume_transition(coverage: SearchCoverage, spec: SearchSpec) -> None:
-    if coverage.browser_transitions >= spec.max_browser_transitions:
+    if (
+        spec.max_browser_transitions is not None
+        and coverage.browser_transitions >= spec.max_browser_transitions
+    ):
         coverage.budget_exhausted = True
         raise _BudgetExhausted
     coverage.browser_transitions += 1
@@ -364,7 +416,11 @@ async def _open_search_page(
 ) -> Any:
     _consume_transition(coverage, spec)
     page = await context.new_page()
-    await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+    except Exception:
+        await page.close()
+        raise
     if page.url.startswith("https://consent.google.com"):
         reject = page.get_by_role("button", name="Reject all")
         if not await reject.count():
@@ -380,16 +436,15 @@ async def _open_search_page(
     return page
 
 
-async def _load_source_labels(
-    page: Any, coverage: SearchCoverage, spec: SearchSpec
-) -> list[str]:
+async def _load_source_labels(page: Any, coverage: SearchCoverage, spec: SearchSpec) -> list[str]:
     clicks = 0
+    coverage.last_source_truncated = False
     while True:
         results = page.locator(_RESULT_SELECTOR)
         await results.first.wait_for(timeout=60_000)
         raw_labels = [label for label in await _result_labels(results) if label]
         labels = list(dict.fromkeys(raw_labels))
-        if len(labels) >= spec.retrieval_limit:
+        if spec.retrieval_limit is not None and len(labels) >= spec.retrieval_limit:
             labels = labels[: spec.retrieval_limit]
             _mark_source_stop(coverage, "retrieval_limit", truncated=True)
             break
@@ -398,13 +453,28 @@ async def _load_source_labels(
         if not visible:
             _mark_source_stop(coverage, "ui_exhausted", truncated=False)
             break
-        if clicks >= spec.load_more_clicks:
+        if spec.load_more_clicks is not None and clicks >= spec.load_more_clicks:
             _mark_source_stop(coverage, "click_budget", truncated=True)
             break
         before = await results.count()
-        _consume_transition(coverage, spec)
-        await button.first.scroll_into_view_if_needed()
-        await button.first.click()
+        try:
+            _consume_transition(coverage, spec)
+        except _BudgetExhausted:
+            _mark_source_stop(coverage, "transition_budget", truncated=True)
+            break
+        for retry in range(2):
+            try:
+                # Re-resolve the locator after a dynamic page replacement.
+                button = page.get_by_role("button", name="View more flights", exact=False)
+                # click performs its own scrolling; avoid a separate stale-element step.
+                await wait_for(button.first.click(), timeout=20)
+                break
+            except Exception:
+                if retry:
+                    _mark_source_stop(coverage, "load_error", truncated=True)
+                    coverage.source_candidates_loaded += len(labels)
+                    return labels
+                coverage.retries += 1
         coverage.source_load_more_clicks += 1
         clicks += 1
         try:
@@ -430,6 +500,7 @@ def _mark_source_stop(
     *,
     truncated: bool,
 ) -> None:
+    coverage.last_source_truncated = truncated
     if truncated or coverage.source_load_stop_reason == "not_applicable":
         coverage.source_load_stop_reason = reason
     coverage.source_truncated = coverage.source_truncated or truncated
@@ -445,8 +516,27 @@ async def _select_label(
 ) -> None:
     results = page.locator(_RESULT_SELECTOR)
     await results.first.wait_for(timeout=60_000)
-    current_labels = await _result_labels(results)
     target_identity = _choice_identity(label)
+    # URL changes can precede the next stage's DOM. Wait for the intended
+    # observed flight, not merely for any old result to remain visible.
+    parts = [part for part in target_identity[1:9] if part] if len(target_identity) > 1 else [label]
+    try:
+        await page.wait_for_function(
+            """input => Array.from(document.querySelectorAll(input.selector)).some(node => {
+                const label = (node.getAttribute('aria-label') || '').replace(/\\s+/g, ' ');
+                return input.parts.every(part => label.includes(part));
+            })""",
+            arg={"selector": _RESULT_SELECTOR, "parts": parts},
+            timeout=20_000,
+        )
+    except Exception as exc:
+        raise ProviderError(
+            "branch_changed",
+            "The selected flight did not appear after navigation.",
+            retryable=True,
+            coverage=coverage,
+        ) from exc
+    current_labels = await _result_labels(results)
     choice = None
     for index, current_label in enumerate(current_labels):
         if current_label and _choice_identity(current_label) == target_identity:
@@ -461,9 +551,9 @@ async def _select_label(
             retryable=True,
             details={
                 "requested_choice": target_identity,
-                "available_choices": [
-                    _choice_identity(item) for item in current_labels if item
-                ][:5],
+                "available_choices": [_choice_identity(item) for item in current_labels if item][
+                    :5
+                ],
             },
             coverage=coverage,
             requests_made=coverage.browser_transitions,
@@ -505,6 +595,13 @@ def _choice_identity(label: str) -> tuple[str, ...]:
 async def _search_discovery_browser(
     browser: Any, url: str, spec: SearchSpec, requested_segments: list[Any]
 ) -> ProviderResult:
+    if spec.continuation:
+        spec = spec.model_copy(
+            update={
+                k: spec.continuation.get(k, getattr(spec, k))
+                for k in ("retrieval_limit", "load_more_clicks")
+            }
+        )
     coverage = SearchCoverage()
     context = await browser.new_context(locale="en-US")
     try:
@@ -513,15 +610,25 @@ async def _search_discovery_browser(
             labels = await _load_source_labels(page, coverage, spec)
         finally:
             await page.close()
+    except Exception as exc:
+        exc.search_coverage = coverage
+        raise
     finally:
         await context.close()
+    _read_continuation(spec, "discovery")
     coverage.candidates_seen = len(labels)
     options = _parse_discovery_options(
         labels, spec, requested_segments, coverage, datetime.now(UTC)
     )
-    coverage.fully_explored = not (
-        coverage.source_truncated or coverage.source_parse_failures
-    )
+    coverage.fully_explored = not (coverage.source_truncated or coverage.source_parse_failures)
+    if coverage.source_truncated:
+        coverage.pending_branches = 1
+        coverage.continuation = _continuation(
+            spec,
+            "discovery",
+            retrieval_limit=(None if spec.retrieval_limit is None else spec.retrieval_limit * 2),
+            load_more_clicks=(None if spec.load_more_clicks is None else spec.load_more_clicks + 1),
+        )
     if not options:
         raise ProviderError(
             "browser_parse_error",
@@ -531,9 +638,7 @@ async def _search_discovery_browser(
             coverage=coverage,
             requests_made=coverage.browser_transitions,
         )
-    return ProviderResult(
-        "success", options, coverage.browser_transitions, coverage=coverage
-    )
+    return ProviderResult("success", options, coverage.browser_transitions, coverage=coverage)
 
 
 def _parse_discovery_options(
@@ -579,6 +684,13 @@ def _parse_discovery_options(
 async def _explore_complete_tickets(
     browser: Any, url: str, spec: SearchSpec, journey_count: int
 ) -> ProviderResult:
+    if spec.continuation:
+        spec = spec.model_copy(
+            update={
+                k: spec.continuation.get(k, getattr(spec, k))
+                for k in ("retrieval_limit", "load_more_clicks")
+            }
+        )
     coverage = SearchCoverage()
     context = await browser.new_context(locale="en-US")
 
@@ -600,9 +712,7 @@ async def _explore_complete_tickets(
                 await page.get_by_text("Selected flights", exact=True).first.wait_for(
                     timeout=60_000
                 )
-                await page.get_by_text("Booking options", exact=True).first.wait_for(
-                    timeout=60_000
-                )
+                await page.get_by_text("Booking options", exact=True).first.wait_for(timeout=60_000)
                 return await page.locator("body").inner_text(), page.url
             return await _load_source_labels(page, coverage, spec), None
         finally:
@@ -614,17 +724,46 @@ async def _explore_complete_tickets(
 
     async def finalize(prefix: list[str]) -> FlightOption:
         body, source_url = await replay(prefix, terminal=True)
-        return _parse_complete_itinerary(
-            prefix, body, source_url, spec, datetime.now(UTC)
-        )
+        return _parse_complete_itinerary(prefix, body, source_url, spec, datetime.now(UTC))
 
     try:
-        options = await _run_bounded_exploration(
-            spec, journey_count, coverage, discover, finalize
-        )
+        options = await _run_bounded_exploration(spec, journey_count, coverage, discover, finalize)
     finally:
         await context.close()
     return _complete_result(options, coverage)
+
+
+def _search_fingerprint(spec: SearchSpec) -> str:
+    data = spec.model_dump(
+        mode="json",
+        exclude={
+            "request_id",
+            "continuation",
+            "max_results",
+            "retrieval_limit",
+            "load_more_clicks",
+            "candidates_per_stage",
+            "max_complete_quotes",
+            "max_browser_transitions",
+            "stage_candidate_offsets",
+        },
+    )
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+def _read_continuation(spec: SearchSpec, kind: str) -> dict[str, Any]:
+    state = spec.continuation or {}
+    if state and (
+        state.get("version") != 1
+        or state.get("kind") != kind
+        or state.get("fingerprint") != _search_fingerprint(spec)
+    ):
+        raise ProviderError("invalid_continuation", "Continuation does not match this search.")
+    return state
+
+
+def _continuation(spec: SearchSpec, kind: str, **state: Any) -> dict[str, Any]:
+    return {"version": 1, "kind": kind, "fingerprint": _search_fingerprint(spec), **state}
 
 
 async def _run_bounded_exploration(
@@ -634,59 +773,111 @@ async def _run_bounded_exploration(
     discover: Callable[[list[str]], Awaitable[list[str]]],
     finalize: Callable[[list[str]], Awaitable[FlightOption]],
 ) -> list[FlightOption]:
-    options: list[FlightOption] = []
-    seen_quotes: set[tuple[Any, ...]] = set()
-
-    async def walk(prefix: list[str]) -> None:
-        if coverage.budget_exhausted:
-            coverage.branches_pruned += 1
-            return
-        if len(prefix) == journey_count:
-            if coverage.branches_attempted >= spec.max_complete_quotes:
-                coverage.budget_exhausted = True
-                coverage.branches_pruned += 1
-                return
-            coverage.branches_attempted += 1
-            try:
+    state = _read_continuation(spec, "tree")
+    pending = list(state.get("pending", [[]]))
+    deferred: list[list[str]] = []
+    options = [FlightOption.model_validate(item) for item in state.get("options", [])]
+    seen_quotes = {_complete_quote_key(option) for option in options}
+    expanded = dict(state.get("expanded", {}))
+    while pending:
+        prefix = pending.pop(0)
+        terminal = len(prefix) == journey_count
+        if (
+            terminal
+            and spec.max_complete_quotes is not None
+            and (coverage.branches_attempted >= spec.max_complete_quotes)
+        ):
+            pending.insert(0, prefix)
+            coverage.budget_exhausted = True
+            break
+        try:
+            if terminal:
+                coverage.branches_attempted += 1
                 option = await finalize(prefix)
                 coverage.quotes_completed += 1
                 if spec.require_overhead_cabin_bag and not _baggage_meets_requirement(
                     option.baggage, journey_count
                 ):
                     coverage.quotes_filtered += 1
-                    return
-                key = _complete_quote_key(option)
-                if key in seen_quotes:
+                elif _complete_quote_key(option) in seen_quotes:
                     coverage.duplicates += 1
-                    return
-                seen_quotes.add(key)
-                options.append(option)
-            except _BudgetExhausted:
-                coverage.branches_pruned += 1
-            except Exception as exc:
-                _record_branch_error(coverage, exc)
-            return
-        try:
-            labels = await discover(prefix)
+                else:
+                    seen_quotes.add(_complete_quote_key(option))
+                    options.append(option)
+            else:
+                labels = await discover(prefix)
+                coverage.candidates_seen += len(labels)
+                key = json.dumps(prefix)
+                previous = set(expanded.get(key, []))
+                fresh = [
+                    label for label in labels if json.dumps(_choice_identity(label)) not in previous
+                ]
+                expanded[key] = list(previous | {json.dumps(_choice_identity(x)) for x in labels})
+                depth = len(prefix)
+                offset = (
+                    spec.stage_candidate_offsets[depth]
+                    if depth < len(spec.stage_candidate_offsets)
+                    else 0
+                )
+                fresh = fresh[offset:] + fresh[:offset]
+                if depth == 0 and spec.preferred_outbound:
+                    target = FlightOption.model_validate(spec.preferred_outbound)
+
+                    def preference(label, target=target):
+                        candidate = _parse_browser_label(label, spec, 1)
+                        if candidate is None:
+                            return True
+
+                        def identity(flight):
+                            return [
+                                (
+                                    leg.origin,
+                                    leg.destination,
+                                    leg.departure_at,
+                                    leg.arrival_at,
+                                    leg.airline_name,
+                                )
+                                for leg in flight.legs
+                                if leg.journey_index == 0
+                            ]
+
+                        return identity(candidate) != identity(target)
+
+                    fresh.sort(key=preference)
+                n = spec.candidates_per_stage
+                chosen = fresh if n is None else fresh[:n]
+                deferred.extend([*prefix, label] for label in ([] if n is None else fresh[n:]))
+                pending[0:0] = [[*prefix, label] for label in chosen]
+                if coverage.last_source_truncated:
+                    # Revisit this expansion with a larger retrieval window next chunk.
+                    deferred.append(prefix)
         except _BudgetExhausted:
-            coverage.branches_pruned += 1
-            return
+            pending.insert(0, prefix)
+            coverage.budget_exhausted = True
+            break
         except Exception as exc:
             _record_branch_error(coverage, exc)
-            return
-        coverage.candidates_seen += len(labels)
-        depth = len(prefix)
-        offset = (
-            spec.stage_candidate_offsets[depth]
-            if depth < len(spec.stage_candidate_offsets)
-            else 0
+            deferred.append(prefix)
+    pending.extend(deferred)
+    coverage.pending_branches = len(pending)
+    coverage.branches_pruned = len(pending)  # legacy count; these branches are now retained
+    if pending:
+        coverage.continuation = _continuation(
+            spec,
+            "tree",
+            pending=pending,
+            expanded=expanded,
+            options=[option.model_dump(mode="json") for option in options],
+            retrieval_limit=(None if spec.retrieval_limit is None else spec.retrieval_limit * 2),
+            load_more_clicks=(None if spec.load_more_clicks is None else spec.load_more_clicks + 1),
         )
-        choices = labels[offset : offset + spec.candidates_per_stage]
-        coverage.branches_pruned += max(0, len(labels) - len(choices))
-        for label in choices:
-            await walk([*prefix, label])
-
-    await walk([])
+    coverage.fully_explored = not (
+        pending
+        or coverage.budget_exhausted
+        or coverage.branch_errors
+        or coverage.source_truncated
+        or coverage.source_parse_failures
+    )
     options.sort(
         key=lambda option: (
             option.price is None,
@@ -696,23 +887,13 @@ async def _run_bounded_exploration(
             _complete_quote_key(option),
         )
     )
-    if len(options) > spec.max_results:
-        coverage.branches_pruned += len(options) - spec.max_results
-        options = options[: spec.max_results]
-    coverage.fully_explored = not (
-        coverage.budget_exhausted
-        or coverage.branches_pruned
-        or coverage.branch_errors
-    )
+    # Keep every quote; output pagination belongs to the saved-result views.
     return [
-        option.model_copy(update={"provider_rank": rank})
-        for rank, option in enumerate(options, start=1)
+        option.model_copy(update={"provider_rank": i}) for i, option in enumerate(options, start=1)
     ]
 
 
-def _complete_result(
-    options: list[FlightOption], coverage: SearchCoverage
-) -> ProviderResult:
+def _complete_result(options: list[FlightOption], coverage: SearchCoverage) -> ProviderResult:
     if options:
         return ProviderResult("success", options, coverage.browser_transitions, coverage)
     if (
@@ -720,9 +901,7 @@ def _complete_result(
         and coverage.quotes_completed
         and coverage.quotes_filtered == coverage.quotes_completed
     ):
-        return ProviderResult(
-            "empty", [], coverage.browser_transitions, coverage=coverage
-        )
+        return ProviderResult("empty", [], coverage.browser_transitions, coverage=coverage)
     code = (
         "complete_ticket_search_incomplete"
         if coverage.budget_exhausted or coverage.branch_errors or coverage.branches_pruned
@@ -781,7 +960,7 @@ def _parse_browser_label(
     observed_at: datetime | None = None,
 ) -> FlightOption | None:
     match = _RESULT_RE.search(" ".join(label.split()))
-    if match is None:
+    if match is None or not (match["hours"] or match["minutes"]):
         return None
     departure_at = _parse_local_datetime(
         match["departure_date"], match["departure_time"], spec.departure_date
@@ -792,9 +971,9 @@ def _parse_browser_label(
     if arrival_at < departure_at:
         arrival_at = arrival_at.replace(year=arrival_at.year + 1)
     hours = int(match["hours"] or 0)
-    duration = hours * 60 + int(match["minutes"])
+    duration = hours * 60 + int(match["minutes"] or 0)
     stops = 0 if match["stops"] == "Nonstop" else int(match["stops"].split()[0])
-    price = float(match["price"].replace(",", ""))
+    price = float(match["price"].replace(",", "")) if match["price"] else None
     return FlightOption(
         provider_rank=rank,
         price=price,
@@ -942,9 +1121,7 @@ def _parse_selected_booking_option(
             requests_made=1,
         )
     provider_index, provider_end, price_index = matching_blocks[0]
-    provider = (
-        lines[provider_index].removeprefix("Book with ").removesuffix("Airline").strip()
-    )
+    provider = lines[provider_index].removeprefix("Book with ").removesuffix("Airline").strip()
     fare_name = None
     fare_lines: list[str] = []
     ignored = {"Hide options", "View options", "Booking options"}
@@ -952,11 +1129,7 @@ def _parse_selected_booking_option(
     if preceding not in ignored and not preceding.startswith("Book with "):
         fare_name = preceding
     end = next(
-        (
-            index
-            for index in range(price_index + 1, provider_end)
-            if lines[index] == "Continue"
-        ),
+        (index for index in range(price_index + 1, provider_end) if lines[index] == "Continue"),
         min(price_index + 12, provider_end - 1),
     )
     fare_lines = lines[max(provider_index, price_index - 2) : end + 1]

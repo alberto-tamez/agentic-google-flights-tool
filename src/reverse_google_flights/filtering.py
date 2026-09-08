@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from reverse_google_flights.models import BatchReport, FlightOption, RankedFlight
+from reverse_google_flights.models import BatchReport, FlightOption, RankedFlight, SearchSpec
 
 
 class SortKey(StrEnum):
@@ -19,11 +19,12 @@ class SortKey(StrEnum):
 class ShortlistSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    request_ids: list[str] = Field(default_factory=list, max_length=500)
+    request_ids: list[str] = Field(default_factory=list)
+    currency: str | None = None
     max_price: float | None = Field(default=None, ge=0)
     max_duration_minutes: int | None = Field(default=None, ge=1)
-    max_total_stops: int | None = Field(default=None, ge=0, le=20)
-    airlines: list[str] = Field(default_factory=list, max_length=50)
+    max_total_stops: int | None = Field(default=None, ge=0)
+    airlines: list[str] = Field(default_factory=list)
     earliest_departure_hour: int | None = Field(default=None, ge=0, le=23)
     latest_departure_hour: int | None = Field(default=None, ge=0, le=23)
     require_overhead_cabin_bag: bool = False
@@ -33,7 +34,12 @@ class ShortlistSpec(BaseModel):
         min_length=1,
         max_length=4,
     )
-    limit: int = Field(default=5, ge=1, le=100)
+    limit: int = Field(default=5, ge=1)
+
+    @field_validator("currency")
+    @classmethod
+    def validate_currency(cls, value: str | None) -> str | None:
+        return None if value is None else SearchSpec.validate_currency(value.strip())
 
     @model_validator(mode="after")
     def validate_window(self) -> ShortlistSpec:
@@ -88,6 +94,16 @@ def collect_matches(source: BatchReport, filters: ShortlistSpec) -> FilterCollec
         for outcome in source.outcomes
         if not request_filter or outcome.request_id in request_filter
     ]
+    currencies = {option.currency for outcome in selected_outcomes for option in outcome.options}
+    if (
+        filters.currency is None
+        and len(currencies) > 1
+        and (filters.max_price is not None or SortKey.PRICE in filters.sort_by)
+    ):
+        raise ValueError(
+            "Select a currency before comparing prices in a mixed-currency report: "
+            + ", ".join(sorted(currencies))
+        )
 
     for outcome in selected_outcomes:
         for option in outcome.options:
@@ -109,8 +125,14 @@ def collect_matches(source: BatchReport, filters: ShortlistSpec) -> FilterCollec
     source_parse_failures = sum(
         outcome.coverage.source_parse_failures for outcome in selected_outcomes
     )
-    source_fully_explored = all(
-        outcome.coverage.fully_explored for outcome in selected_outcomes
+    source_fully_explored = bool(selected_outcomes) and all(
+        outcome.status != "error"
+        and outcome.coverage.fully_explored
+        and not outcome.coverage.source_truncated
+        and not outcome.coverage.source_parse_failures
+        and not outcome.coverage.budget_exhausted
+        and not getattr(outcome.coverage, "continuation", None)
+        for outcome in selected_outcomes
     )
     return FilterCollection(
         matches=accepted,
@@ -150,6 +172,8 @@ def _evaluate(
 ) -> tuple[set[str], set[str]]:
     failures: set[str] = set()
     unknown: set[str] = set()
+    if filters.currency is not None and option.currency != filters.currency:
+        return {"currency"}, set()
     if filters.max_price is not None:
         if option.price is None:
             unknown.add("max_price")

@@ -1,3 +1,4 @@
+from reverse_google_flights.api import AgentAPI
 from reverse_google_flights.batch import BatchExecutor
 from reverse_google_flights.exploration import Exploration, ExplorationProgress, SearchSpace
 from reverse_google_flights.filtering import ShortlistReport, ShortlistSpec, build_shortlist
@@ -18,6 +19,7 @@ from reverse_google_flights.models import (
 )
 
 __all__ = [
+    "AgentAPI",
     "BatchExecutor",
     "BatchReport",
     "Exploration",

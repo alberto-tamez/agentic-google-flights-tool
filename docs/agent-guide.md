@@ -1,44 +1,67 @@
 # Agentic Flights: agent guide
 
-Use this tool to answer a trip-planning question with a small, useful shortlist. Run searches and comparisons in code; return only the evidence the user needs to choose.
+Find flights that fit the user's trip and preferences. Compare in code, then return
+useful alternatives with evidence. After installation, no repository checkout is required.
 
-## Setup and instructions
+## Start
 
-After installing the package, run `agentic-flights guide` from any directory.
-Use an installed Google Chrome, or run `python -m playwright install chromium`.
-Read `agentic-flights guide reference` for Python examples and detailed fields;
-read `agentic-flights guide schema` for the JSON input schema. These instructions
-are bundled with the installed version; no repository checkout is required.
+Use Python 3.11+ and install `agentic-google-flights-tool`. Use an installed Google
+Chrome or run `python -m playwright install chromium`. Read `agentic-flights guide reference` for the complete Python example. Load `agentic-flights guide space`,
+`search`, or `filters` for only the schema you need; `operations` lists the API.
 
-## Turn the goal into a search
+## Plan and explore
 
-Identify origin and destination airport choices, departure dates, trip lengths, passengers, currency, and hard requirements. Resolve relative dates to concrete dates and cities to explicit airport codes. Clarify only missing information that changes the search.
+Resolve cities to explicit airport choices and relative dates to concrete dates.
+Record travelers, currency, stop/timing requirements, baggage, and the user's
+price-versus-time preferences. Clarify missing information that changes the trip.
 
-For flexible one-way or round-trip searches, use `SearchSpace` and check `space.count` before executing. Choose reasonable internal batch sizes and continue exploring relevant alternatives. Respect any explicit user budget, but do not require users to specify a combination count. If the search is too broad to complete, narrow it using the trip preferences and explain the remaining uncertainty. For exact or multi-city itineraries, supply `SearchSpec` requests to `BatchExecutor` or the CLI.
+Use `AgentAPI.plan` to validate and save a `SearchSpace` without making flight
+requests. `AgentAPI.explore` accepts the saved run ID and returns a new snapshot.
+Each chunk visits airport pairs and dates broadly and interleaves promising
+unfinished queries. Save the latest run ID. All original queries and continuation
+state are stored with it, so another process can continue.
 
-The [Python example](reference.md#programmatic-trip-exploration) shows the API setup. Read it when implementing the search; consult the rest of the reference only for fields you need.
+A work chunk controls response latency, not total search scope. Repeat exploration
+while work remains. Do not invent a combination cutoff. Respect an explicit user
+budget or a user-defined satisfaction condition; otherwise report an interruption
+as incomplete, not as the best possible answer. Query errors are retained; inspect
+and retry retryable errors explicitly. An unresolved branch or parse failure means
+coverage is incomplete even if every route/date query was attempted.
 
-## Explore, compare, verify
+Start with `search_mode="discover"` for broad comparison. For long verification
+work, set an explicit `work_quotes` execution chunk and continue its returned run
+with `explore`. Finite query retrieval/candidate/quote settings retain continuation
+state. Unset search limits mean no configured cutoff; service availability and page
+load timeouts can still interrupt the work.
 
-1. Start with `search_mode="discover"` and apply the user's price, stop, and timing constraints. Keep browser concurrency at two workers.
-2. Execute bounded batches. With `Exploration.advance`, save the returned `run_id` and pass it as `resume_from` to continue the same space. Continue through the relevant search space, respecting any explicit user budget. Failures count as attempted; inspect them before claiming coverage.
-3. Filter and rank saved results in code. Compare prices within the same currency and preserve useful price-versus-duration choices. Keep full result JSON outside model context.
-4. Run `search_mode="verify"` for the shortlisted trip queries that need complete prices or baggage evidence. Verification searches current inventory again; it does not lock a discovery result. Never present provisional multi-leg prices or summed one-way fares as a verified complete ticket.
+## Compare, inspect, verify
 
-## Read only what you need
+Use `compare` with filters to rank saved results offline. Select a currency before
+price comparisons in a mixed-currency dataset. `alternatives` returns observed
+price/duration/stops tradeoffs rather than assuming that cheapest means best.
+`inspect` expands only selected result IDs, including their original query and
+requested return date. Keep full reports outside the conversation.
 
-Run these commands from any directory, replacing the IDs with returned values:
+Discovery multi-leg prices are provisional. Call `verify` on selected result IDs
+for current final prices and baggage. It reports whether the observed itinerary
+matched; it must not silently substitute another flight. An outbound-only match
+proves only the selected outbound, not a specific return choice. Matching uses the
+route, local times, airline and flight number where known, not a provider booking ID.
+If a match is pending, continue its saved run. If it is absent, report that clearly.
 
-```sh
-agentic-flights summary RUN_ID
-agentic-flights list RUN_ID --page-size 5
-agentic-flights show RUN_ID RESULT_ID
-```
-
-Use `list --filters` to narrow results offline. Expand only finalists with `show`; it includes fare evidence and booking URLs. Avoid `--full` in conversational tool output. Saved runs can expire; export results the user needs to keep.
+Never sum independent one-way fares and label them a complete ticket. A complete
+quote requires `complete_single_ticket` and `provider_final_total`. Hard cabin-bag
+requirements reject unknown or extra-cost baggage and require whole-trip evidence.
 
 ## Return a decision
 
-Present a short comparison with total price and currency, dates, airports, duration, stops, and verified baggage where relevant. Explain why each option is worth considering. Include booking links when available and distinguish verified totals from provisional prices.
+Present a concise comparison with total price/currency, dates, airports, duration,
+stops, baggage evidence, and booking links when available. Explain tradeoffs.
+State remaining queries/branches, errors, parse losses and observation freshness.
+No tool can prove Google's entire inventory was exposed. Do not book tickets.
 
-State how many combinations were attempted, failures, remaining queries, and any retrieval limits that affect the recommendation. Exhausting the defined search space does not prove the global lowest fare. Do not book tickets.
+## MCP
+
+Install `agentic-google-flights-tool[mcp]`. Run `agentic-flights-mcp` for stdio or
+`agentic-flights-mcp --transport streamable-http` for local HTTP. The same operations
+use explicit saved handles with no session dependency. Call `schema` on demand.
