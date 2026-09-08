@@ -27,6 +27,8 @@ while True:
     progress = api.explore(run_id, prefer=["price", "duration", "stops"])
     run_id = progress["run_id"]
     # Save run_id for interruption recovery. Avoid printing whole reports.
+    if progress["stop_reason"] == "blocked":
+        break  # Report the errors; retry_errors=True explicitly retries blocked work.
     if progress["search_space_exhausted"]:
         break
 # Check failures and coverage before drawing conclusions.
@@ -38,7 +40,8 @@ tradeoffs = api.alternatives(run_id, {"currency": "EUR"})
 selected_ids = ids
 verified = api.verify(run_id, selected_ids, require_bag=True, work_quotes=1)
 # work_quotes schedules one quote attempt per query per call; it is NOT a total cutoff.
-while verified["coverage_totals"]["pending_branches"]:
+while (verified["coverage_totals"]["pending_branches"]
+       and not verified["coverage_totals"]["blocked_queries"]):
     verified = api.explore(verified["run_id"])
 print(verified["verification"])
 ```
@@ -93,7 +96,7 @@ and return dates; `inspect` returns the full original query. Legacy reports with
 this metadata can be read, but cannot be verified by selected result IDs.
 
 `verify` bypasses the normal fare cache. Its `verification` entries distinguish
-`matched_observed_itinerary`, `pending`, and `not_matched`. A result ID identifies
+`matched_observed_itinerary`, `pending`, `blocked`, and `not_matched`. A result ID identifies
 an immutable snapshot record; changing prices or ranks creates different IDs.
 Never interpret a fresh but different returned itinerary as the selected flight.
 

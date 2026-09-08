@@ -24,7 +24,8 @@ state are stored with it, so another process can continue.
 A work chunk controls response latency, not total search scope. Repeat exploration
 while work remains. Do not invent a combination cutoff. Respect an explicit user
 budget or a user-defined satisfaction condition; otherwise report an interruption
-as incomplete, not as the best possible answer. Query errors are retained; inspect
+as incomplete, not as the best possible answer. A `blocked` state requires an explicit retry or changed input; do not loop on it.
+Query errors are retained; inspect
 and retry retryable errors explicitly. An unresolved branch or parse failure means
 coverage is incomplete even if every route/date query was attempted.
 

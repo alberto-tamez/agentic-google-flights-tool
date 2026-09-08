@@ -115,7 +115,10 @@ class AgentAPI:
                 retry_errors=retry_errors,
             ).model_dump(mode="json")
         pending = [
-            o for o in report.outcomes if o.coverage.continuation or (retry_errors and o.error)
+            o
+            for o in report.outcomes
+            if (o.coverage.continuation and not o.coverage.blocked)
+            or (retry_errors and (o.error or o.coverage.blocked))
         ]
         if work_chunk < 1:
             raise ValueError("work_chunk must be positive")
@@ -249,6 +252,8 @@ class AgentAPI:
                     "selected_result_id": outcome.request_id,
                     "status": "matched_observed_itinerary"
                     if matched
+                    else "blocked"
+                    if outcome.coverage.blocked
                     else "pending"
                     if outcome.coverage.continuation
                     else "not_matched",

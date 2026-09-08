@@ -98,6 +98,7 @@ class ExplorationProgress(BaseModel):
     pending_queries: int = 0
     stop_reason: str = "work_chunk_complete"
     failure_events: int = 0
+    blocked_queries: int = 0
 
 
 class Exploration:
@@ -143,6 +144,7 @@ class Exploration:
             raise ValueError("prefer must contain price, duration, or stops")
         outcomes = []
         history = []
+        visits = {}
         if resume_from is not None:
             previous, _ = load_report(self.store.resolve(resume_from)[0])
             state = previous.exploration_state or {}
@@ -150,11 +152,17 @@ class Exploration:
                 raise ValueError("resume source does not match this search space and provider")
             outcomes = previous.outcomes
             history = list(state.get("failure_history", []))
+            visits = dict(state.get("visits", {}))
             if prefer is None:
                 priorities = state.get("priorities", priorities)
         by_id = {o.request_id: o for o in outcomes}
         next_index = len(outcomes)
-        pending = [o for o in outcomes if o.coverage.continuation or (retry_errors and o.error)]
+        pending = [
+            o
+            for o in outcomes
+            if (o.coverage.continuation and not o.coverage.blocked)
+            or (retry_errors and (o.error or o.coverage.blocked))
+        ]
 
         def priority(outcome):
             def key(option):
@@ -169,7 +177,7 @@ class Exploration:
 
         # This space has one currency. Give promising unfinished queries attention
         # while interleaving unseen airport/date combinations; never discard either.
-        pending.sort(key=priority)
+        pending.sort(key=lambda o: (visits.get(o.request_id, 0), priority(o)))
         selected = []
         while len(selected) < search_budget and (pending or next_index < self.space.count):
             if pending and (len(selected) % 2 == 0 or next_index == self.space.count):
@@ -185,6 +193,7 @@ class Exploration:
             selected.append(spec)
         batch = self.executor.execute(selected)
         for outcome in batch.outcomes:
+            visits[outcome.request_id] = visits.get(outcome.request_id, 0) + 1
             if outcome.error:
                 history.append(
                     {"request_id": outcome.request_id, "error": outcome.error.model_dump()}
@@ -200,6 +209,7 @@ class Exploration:
             "space": self.space.model_dump(mode="json"),
             "failure_history": history,
             "priorities": priorities,
+            "visits": visits,
         }
         encoded = report.model_dump_json()
         run_id, path = self.store.save(encoded)
@@ -209,6 +219,7 @@ class Exploration:
         attempted = len(report.outcomes)
         pending_count = sum(bool(o.coverage.continuation) for o in report.outcomes)
         exhausted = attempted == self.space.count and not pending_count
+        blocked_count = sum(o.coverage.blocked for o in report.outcomes)
         return ExplorationProgress(
             run_id=run_id,
             total=self.space.count,
@@ -218,8 +229,13 @@ class Exploration:
             search_space_exhausted=exhausted,
             pending_queries=pending_count,
             batch_network_requests=batch.counts.network_requests,
+            blocked_queries=blocked_count,
             stop_reason=(
-                "queries_attempted_with_errors"
+                "blocked"
+                if pending_count
+                and blocked_count == pending_count
+                and attempted == self.space.count
+                else "queries_attempted_with_errors"
                 if exhausted and report.counts.error
                 else "search_space_exhausted"
                 if exhausted

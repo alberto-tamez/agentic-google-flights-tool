@@ -779,6 +779,7 @@ async def _run_bounded_exploration(
     options = [FlightOption.model_validate(item) for item in state.get("options", [])]
     seen_quotes = {_complete_quote_key(option) for option in options}
     expanded = dict(state.get("expanded", {}))
+    failed_paths = set(state.get("failed_paths", []))
     while pending:
         prefix = pending.pop(0)
         terminal = len(prefix) == journey_count
@@ -794,6 +795,7 @@ async def _run_bounded_exploration(
             if terminal:
                 coverage.branches_attempted += 1
                 option = await finalize(prefix)
+                failed_paths.discard(json.dumps(prefix))
                 coverage.quotes_completed += 1
                 if spec.require_overhead_cabin_bag and not _baggage_meets_requirement(
                     option.baggage, journey_count
@@ -806,6 +808,7 @@ async def _run_bounded_exploration(
                     options.append(option)
             else:
                 labels = await discover(prefix)
+                failed_paths.discard(json.dumps(prefix))
                 coverage.candidates_seen += len(labels)
                 key = json.dumps(prefix)
                 previous = set(expanded.get(key, []))
@@ -851,15 +854,19 @@ async def _run_bounded_exploration(
                 if coverage.last_source_truncated:
                     # Revisit this expansion with a larger retrieval window next chunk.
                     deferred.append(prefix)
+                    if coverage.source_load_stop_reason == "load_error":
+                        failed_paths.add(json.dumps(prefix))
         except _BudgetExhausted:
             pending.insert(0, prefix)
             coverage.budget_exhausted = True
             break
         except Exception as exc:
             _record_branch_error(coverage, exc)
+            failed_paths.add(json.dumps(prefix))
             deferred.append(prefix)
     pending.extend(deferred)
     coverage.pending_branches = len(pending)
+    coverage.blocked = bool(pending) and all(json.dumps(x) in failed_paths for x in pending)
     coverage.branches_pruned = len(pending)  # legacy count; these branches are now retained
     if pending:
         coverage.continuation = _continuation(
@@ -867,6 +874,7 @@ async def _run_bounded_exploration(
             "tree",
             pending=pending,
             expanded=expanded,
+            failed_paths=sorted(failed_paths),
             options=[option.model_dump(mode="json") for option in options],
             retrieval_limit=(None if spec.retrieval_limit is None else spec.retrieval_limit * 2),
             load_more_clicks=(None if spec.load_more_clicks is None else spec.load_more_clicks + 1),

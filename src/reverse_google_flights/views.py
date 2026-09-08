@@ -72,6 +72,7 @@ def compact_summary(
             "parse_failures": sum(o.coverage.source_parse_failures for o in source.outcomes),
             "truncated_queries": sum(o.coverage.source_truncated for o in source.outcomes),
             "pending_branches": sum(o.coverage.pending_branches for o in source.outcomes),
+            "blocked_queries": sum(o.coverage.blocked for o in source.outcomes),
             "failed_queries": sum(o.status == "error" for o in source.outcomes),
             "branch_errors": sum(o.coverage.branch_errors for o in source.outcomes),
             "retry_attempts": sum(o.coverage.retries for o in source.outcomes),

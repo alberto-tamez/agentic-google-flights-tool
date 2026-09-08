@@ -284,6 +284,7 @@ class SearchCoverage(BaseModel):
     last_source_truncated: bool = Field(default=False, exclude=True)
     retries: int = Field(default=0, ge=0)
     pending_branches: int = Field(default=0, ge=0)
+    blocked: bool = False
     continuation: dict[str, Any] | None = None
 
 

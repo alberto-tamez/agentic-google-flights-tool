@@ -2,6 +2,11 @@
 
 This project uses semantic versioning once releases begin.
 
+## 0.2.1
+
+- Return blocked state for failed branch frontiers instead of retrying them forever.
+- Give unfinished queries fair turns while preserving preference-based ordering.
+
 ## 0.2.0
 
 - Fixed whole-hour duration parsing and retained flights with unavailable prices.
