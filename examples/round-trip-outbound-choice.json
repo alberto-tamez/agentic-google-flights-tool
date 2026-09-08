@@ -16,7 +16,7 @@
       "currency": "EUR",
       "language": "en-US",
       "country": "ES",
-      "max_results": 5
+      "search_mode": "discover"
     }
   ]
 }

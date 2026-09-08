@@ -17,8 +17,7 @@
       "require_overhead_cabin_bag": true,
       "currency": "EUR",
       "language": "en-US",
-      "country": "ES",
-      "max_results": 1
+      "country": "ES"
     },
     {
       "request_id": "open-jaw-with-cabin-bag",
@@ -39,8 +38,7 @@
       "require_overhead_cabin_bag": true,
       "currency": "EUR",
       "language": "en-US",
-      "country": "ES",
-      "max_results": 1
+      "country": "ES"
     }
   ]
 }

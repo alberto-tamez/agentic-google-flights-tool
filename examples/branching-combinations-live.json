@@ -18,7 +18,6 @@
       "currency": "EUR",
       "language": "en-US",
       "country": "ES",
-      "max_results": 4,
       "candidates_per_stage": 2,
       "max_complete_quotes": 4,
       "max_browser_transitions": 24
@@ -43,7 +42,6 @@
       "currency": "EUR",
       "language": "en-US",
       "country": "ES",
-      "max_results": 4,
       "candidates_per_stage": 2,
       "max_complete_quotes": 4,
       "max_browser_transitions": 24

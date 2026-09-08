@@ -1,0 +1,44 @@
+{
+  "provider": "browser",
+  "max_workers": 2,
+  "cache_ttl_seconds": 3600,
+  "ranking_limit": 20,
+  "searches": [
+    {
+      "request_id": "option-01",
+      "origin": "MAD",
+      "destination": "LIS",
+      "departure_date": "2026-10-22",
+      "cabin": "economy",
+      "max_stops": "one_stop_or_fewer",
+      "adults": 1,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES"
+    },
+    {
+      "request_id": "option-02",
+      "origin": "MAD",
+      "destination": "OPO",
+      "departure_date": "2026-10-22",
+      "cabin": "economy",
+      "max_stops": "one_stop_or_fewer",
+      "adults": 1,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES"
+    },
+    {
+      "request_id": "option-03",
+      "origin": "MAD",
+      "destination": "LHR",
+      "departure_date": "2026-10-22",
+      "cabin": "economy",
+      "max_stops": "one_stop_or_fewer",
+      "adults": 1,
+      "currency": "EUR",
+      "language": "en-US",
+      "country": "ES"
+    }
+  ]
+}

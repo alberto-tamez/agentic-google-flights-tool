@@ -139,3 +139,34 @@ class _FakePage:
 
     async def wait_for_function(self, script, arg, timeout) -> None:
         return None
+
+
+DAY = date(2027, 1, 14)
+
+
+def test_detached_more_button_recovers():
+    from test_retrieval import _FakePage
+
+    from reverse_google_flights.provider import _load_source_labels
+
+    page = _FakePage([["a"], ["a", "b"]])
+    original = page.get_by_role
+    calls = [0]
+
+    def role(*args, **kwargs):
+        button = original(*args, **kwargs)
+        old = button.click
+
+        async def click():
+            calls[0] += 1
+            if calls[0] == 1:
+                raise RuntimeError("Element is not attached to DOM")
+            await old()
+
+        button.click = click
+        return button
+
+    page.get_by_role = role
+    coverage = SearchCoverage()
+    labels = asyncio.run(_load_source_labels(page, coverage, make_spec("x", DAY)))
+    assert labels == ["a", "b"] and coverage.retries == 1

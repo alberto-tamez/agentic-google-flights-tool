@@ -45,9 +45,7 @@ def test_bounded_tree_ranks_a_non_first_complete_quote_first() -> None:
         return make_option(prices[tuple(prefix)])
 
     coverage = SearchCoverage()
-    options = asyncio.run(
-        _run_bounded_exploration(spec, 2, coverage, discover, finalize)
-    )
+    options = asyncio.run(_run_bounded_exploration(spec, 2, coverage, discover, finalize))
     assert [option.price for option in options] == [70, 80, 90, 100]
     assert coverage.candidates_seen == 6
     assert coverage.branches_attempted == 4
@@ -87,9 +85,7 @@ def test_truncated_failed_search_is_an_error_and_cannot_be_cached_as_empty() -> 
 
 
 def test_transition_budget_never_exceeds_the_configured_limit() -> None:
-    spec = _strict_bag_spec(max_complete_quotes=2).model_copy(
-        update={"max_browser_transitions": 2}
-    )
+    spec = _strict_bag_spec(max_complete_quotes=2).model_copy(update={"max_browser_transitions": 2})
     coverage = SearchCoverage()
     _consume_transition(coverage, spec)
     _consume_transition(coverage, spec)
@@ -138,6 +134,80 @@ async def _finalize_tree(prefix: list[str]):
         source_text="1 free carry-on. Conditions apply to the entire trip.",
         applies_to_journeys=[0, 1],
     )
-    return make_option(90).model_copy(
-        update={"baggage": included, "booking_provider": "B"}
+    return make_option(90).model_copy(update={"baggage": included, "booking_provider": "B"})
+
+
+DAY = date(2027, 1, 14)
+
+
+def test_tree_continuation_retains_cheap_third_candidate():
+    spec = make_spec("x", DAY, candidates_per_stage=2)
+
+    async def discover(prefix):
+        return ["a", "b", "c"]
+
+    async def finalize(prefix):
+        return make_option({"a": 100, "b": 90, "c": 1}[prefix[0]])
+
+    coverage = SearchCoverage()
+    first = asyncio.run(_run_bounded_exploration(spec, 1, coverage, discover, finalize))
+    assert [x.price for x in first] == [90, 100]
+    assert coverage.pending_branches == 1 and not coverage.fully_explored
+    next_spec = spec.model_copy(update={"continuation": coverage.continuation})
+    second_coverage = SearchCoverage()
+    second = asyncio.run(
+        _run_bounded_exploration(next_spec, 1, second_coverage, discover, finalize)
     )
+    assert [x.price for x in second] == [1, 90, 100]
+    assert second_coverage.fully_explored and second_coverage.continuation is None
+    with pytest.raises(ProviderError, match="Continuation"):
+        asyncio.run(
+            _run_bounded_exploration(
+                next_spec.model_copy(update={"currency": "USD"}),
+                1,
+                SearchCoverage(),
+                discover,
+                finalize,
+            )
+        )
+
+
+def test_truncated_source_never_complete():
+    async def discover(prefix):
+        return ["a"]
+
+    async def finalize(prefix):
+        return make_option()
+
+    coverage = SearchCoverage(source_truncated=True, source_parse_failures=1)
+    asyncio.run(_run_bounded_exploration(make_spec("x", DAY), 1, coverage, discover, finalize))
+    assert not coverage.fully_explored
+
+
+def test_failed_frontier_blocks_until_explicit_retry():
+    spec = make_spec("blocked", DAY)
+
+    async def discover(prefix):
+        return ["flight"]
+
+    async def fail(prefix):
+        raise RuntimeError("unavailable")
+
+    coverage = SearchCoverage()
+    assert asyncio.run(_run_bounded_exploration(spec, 1, coverage, discover, fail)) == []
+    assert coverage.blocked and coverage.continuation
+
+    async def succeed(prefix):
+        return make_option(35)
+
+    next_coverage = SearchCoverage()
+    options = asyncio.run(
+        _run_bounded_exploration(
+            spec.model_copy(update={"continuation": coverage.continuation}),
+            1,
+            next_coverage,
+            discover,
+            succeed,
+        )
+    )
+    assert options[0].price == 35 and next_coverage.fully_explored and not next_coverage.blocked

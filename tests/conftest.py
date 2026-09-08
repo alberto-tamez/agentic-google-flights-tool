@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 from feature_contract import FEATURES
 
-from reverse_google_flights.models import FlightLeg, FlightOption, SearchSpec
+from reverse_google_flights import AgentAPI, BatchExecutor
+from reverse_google_flights.cache import FileCache
+from reverse_google_flights.models import FlightLeg, FlightOption, SearchCoverage, SearchSpec
+from reverse_google_flights.provider import ProviderResult
+from reverse_google_flights.store import ManagedStore
 
 RANDOMIZED_FEATURES = set(FEATURES)
 _FEATURE_RESULTS: list[dict[str, object]] = []
@@ -66,6 +70,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         by_feature[str(result["feature"])] += float(result["seconds"])
     payload = {
         "exit_status": exitstatus,
+        "seed": session.config.getoption("hypothesis_seed", default=None),
         "tests": _FEATURE_RESULTS,
         "latency_seconds": {
             "by_feature": {key: round(value, 6) for key, value in sorted(by_feature.items())},
@@ -128,4 +133,26 @@ def make_option(
                 duration_minutes=duration,
             )
         ],
+    )
+
+
+def make_api(tmp_path, provider_factory=None):
+    class Provider:
+        def search(self, spec):
+            option = make_option(100)
+            if spec.search_mode == "verify":
+                option = option.model_copy(
+                    update={
+                        "ticket_scope": "complete_single_ticket",
+                        "price_provenance": "provider_final_total",
+                    }
+                )
+            return ProviderResult("success", [option], 1, SearchCoverage(fully_explored=True))
+
+    return AgentAPI(
+        ManagedStore(tmp_path / "store"),
+        BatchExecutor(
+            FileCache(tmp_path / "cache", namespace="fake"),
+            provider_factory=provider_factory or Provider,
+        ),
     )

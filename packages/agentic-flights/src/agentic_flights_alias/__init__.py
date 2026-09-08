@@ -1,1 +1,1 @@
-"""Agentic Flights installs Agentic Flights and provides the ``agentic-flights`` command."""
+"""Packaging placeholder; implementation is supplied by agentic-google-flights-tool."""

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-google-flights-tool"
-version = "0.4.3"
+version = "0.4.4"
 description = "Explore and compare flight options with AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -50,11 +50,12 @@ reverse-google-flights = "reverse_google_flights.cli:main"
 packages = ["src/reverse_google_flights"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q -m 'not integration and not live'"
 testpaths = ["tests"]
 markers = [
     "feature(name): maps a test to a user-facing capability",
     "live: calls the live reverse-engineered Google Flights endpoint",
+    "integration: optional local server tests; run explicitly with -m integration",
 ]
 
 [tool.ruff]

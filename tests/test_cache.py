@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from conftest import make_option, make_spec
 
 from reverse_google_flights.cache import FileCache
@@ -11,7 +13,7 @@ def test_cache_key_includes_every_search_criterion(tmp_path, future_date) -> Non
     variants = [
         make_spec("x", future_date, origin="BCN", destination="MAD"),
         make_spec("x", future_date, destination="LHR"),
-        make_spec("x", future_date.replace(day=future_date.day - 1)),
+        make_spec("x", future_date - timedelta(days=1)),
         make_spec("x", future_date, return_date=future_date),
         make_spec("x", future_date, cabin="business"),
         make_spec("x", future_date, max_stops="any"),

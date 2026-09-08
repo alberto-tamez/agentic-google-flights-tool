@@ -60,6 +60,8 @@ def main() -> None:
 
     offset = args.first_departure - min(all_dates)
     for path, document in documents:
+        if not offset or not _visit_dates(document):
+            continue
         _shift_dates(document, offset)
         path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
         print(path.relative_to(EXAMPLES.parent))

@@ -1,26 +1,18 @@
 # Agentic Flights
 
-Find the best flights for your trip with your AI.
+This is the short-name installer for
+[agentic-google-flights-tool](https://pypi.org/project/agentic-google-flights-tool/).
+It contains no separate flight-search implementation.
 
 ```sh
 python -m pip install agentic-flights
 agentic-flights guide
 ```
 
-The short `agentic-flights` package installs [Agentic Flights](https://pypi.org/project/agentic-google-flights-tool/)
-and provides its `agentic-flights` command. It supports the same searches, saved results,
-and bundled agent instructions. It requires Python 3.11 or newer and Google Chrome,
-or Chromium installed with `python -m playwright install chromium`.
-
-## Give this to your AI
-
-```text
-Install Agentic Flights with `python -m pip install agentic-flights`, then read
-`agentic-flights guide` and find the best flights for my trip.
-
-My trip: [departure city, destination, dates or flexibility, travelers,
-and preferences].
-```
+Requires Python 3.11+ and Google Chrome, or Chromium installed with
+`python -m playwright install chromium`. For MCP, install `agentic-flights[mcp]`.
+See the [main project](https://github.com/alberto-tamez/agentic-google-flights-tool)
+for setup, examples, and limitations.
 
 This unofficial project is not affiliated with Google. Fares can change, and
 search coverage depends on what Google returns.

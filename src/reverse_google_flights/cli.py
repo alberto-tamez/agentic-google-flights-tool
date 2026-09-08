@@ -90,13 +90,11 @@ def run(
             ttl_seconds=batch_input.cache_ttl_seconds,
             namespace=namespace,
         )
-        kwargs: dict[str, Any] = {}
-        kwargs["provider_factory"] = selected_factory
         report = BatchExecutor(
             cache,
             max_workers=batch_input.max_workers,
             ranking_limit=batch_input.ranking_limit,
-            **kwargs,
+            provider_factory=selected_factory,
         ).execute(batch_input.searches)
     except (OSError, json.JSONDecodeError, ValidationError, ValueError) as exc:
         error = {"error": {"code": "invalid_input", "message": str(exc)}}
@@ -206,7 +204,7 @@ def _run_guide(argv: Sequence[str]) -> int:
 
 def _run_filter(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="reverse-google-flights filter",
+        prog="agentic-flights filter",
         description="Filter and rank a saved flight report without network access.",
     )
     parser.add_argument("source", help="managed run ID or saved batch report JSON")
@@ -240,7 +238,7 @@ def _run_filter(argv: Sequence[str]) -> int:
 
 
 def _run_summary(argv: Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="reverse-google-flights summary")
+    parser = argparse.ArgumentParser(prog="agentic-flights summary")
     parser.add_argument("source")
     parser.add_argument("--full", action="store_true")
     args = parser.parse_args(argv)
@@ -262,7 +260,7 @@ def _run_summary(argv: Sequence[str]) -> int:
 
 
 def _run_list(argv: Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="reverse-google-flights list")
+    parser = argparse.ArgumentParser(prog="agentic-flights list")
     parser.add_argument("source")
     parser.add_argument("--filters", help="filter JSON file, or - for stdin")
     parser.add_argument("--page-size", type=int, default=5)
@@ -292,7 +290,7 @@ def _run_list(argv: Sequence[str]) -> int:
 
 
 def _run_show(argv: Sequence[str]) -> int:
-    parser = argparse.ArgumentParser(prog="reverse-google-flights show")
+    parser = argparse.ArgumentParser(prog="agentic-flights show")
     parser.add_argument("source")
     parser.add_argument("result_ids", nargs="+")
     args = parser.parse_args(argv)

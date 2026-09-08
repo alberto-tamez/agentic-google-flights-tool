@@ -5,7 +5,9 @@ import json
 import pytest
 from conftest import make_option
 
-from reverse_google_flights.filtering import ShortlistSpec
+from reverse_google_flights import BatchExecutor
+from reverse_google_flights.cache import FileCache
+from reverse_google_flights.filtering import ShortlistSpec, collect_matches
 from reverse_google_flights.models import (
     BatchCounts,
     BatchReport,
@@ -28,9 +30,7 @@ def test_default_summary_stays_bounded_for_a_thousand_options(tmp_path) -> None:
 def test_filtered_pages_have_stable_ids_without_duplicates_or_skips(tmp_path) -> None:
     source = _large_report(30)
     filters = ShortlistSpec(max_price=10, sort_by=["price"], limit=5)
-    first = list_page(
-        source, "dataset", tmp_path / "full.json", filters, page_size=5, cursor=None
-    )
+    first = list_page(source, "dataset", tmp_path / "full.json", filters, page_size=5, cursor=None)
     second = list_page(
         source,
         "dataset",
@@ -56,9 +56,7 @@ def test_filtered_pages_have_stable_ids_without_duplicates_or_skips(tmp_path) ->
 def test_cursor_rejects_changed_filters_or_dataset(tmp_path) -> None:
     source = _large_report(20)
     filters = ShortlistSpec(max_price=10)
-    page = list_page(
-        source, "dataset", tmp_path / "full.json", filters, page_size=5, cursor=None
-    )
+    page = list_page(source, "dataset", tmp_path / "full.json", filters, page_size=5, cursor=None)
     with pytest.raises(ValueError, match="does not match"):
         list_page(
             source,
@@ -69,15 +67,13 @@ def test_cursor_rejects_changed_filters_or_dataset(tmp_path) -> None:
             cursor=page["next_cursor"],
         )
     with pytest.raises(ValueError, match="invalid cursor"):
-        list_page(
-            source, "dataset", tmp_path / "full.json", filters, page_size=5, cursor="bad"
-        )
+        list_page(source, "dataset", tmp_path / "full.json", filters, page_size=5, cursor="bad")
 
 
 def test_identical_options_with_distinct_source_ranks_have_distinct_ids(tmp_path) -> None:
     source = _large_report(2)
-    source.outcomes[0].options[1] = source.outcomes[0].options[0].model_copy(
-        update={"provider_rank": 2}
+    source.outcomes[0].options[1] = (
+        source.outcomes[0].options[0].model_copy(update={"provider_rank": 2})
     )
     page = list_page(
         source,
@@ -95,8 +91,10 @@ def test_identical_options_with_distinct_source_ranks_have_distinct_ids(tmp_path
 
 def test_show_returns_full_evidence_only_for_selected_ids(tmp_path) -> None:
     source = _large_report(3)
-    source.outcomes[0].options[0] = source.outcomes[0].options[0].model_copy(
-        update={"source_url": "https://www.google.com/travel/flights/booking?selected"}
+    source.outcomes[0].options[0] = (
+        source.outcomes[0]
+        .options[0]
+        .model_copy(update={"source_url": "https://www.google.com/travel/flights/booking?selected"})
     )
     page = list_page(
         source,
@@ -106,9 +104,7 @@ def test_show_returns_full_evidence_only_for_selected_ids(tmp_path) -> None:
         page_size=3,
         cursor=None,
     )
-    result_id = next(
-        item["result_id"] for item in page["results"] if item["price"] == 0
-    )
+    result_id = next(item["result_id"] for item in page["results"] if item["price"] == 0)
     details = show_results(source, "dataset", tmp_path / "full.json", [result_id])
     assert len(details["results"]) == 1
     assert details["results"][0]["option"]["source_url"].endswith("selected")
@@ -142,3 +138,25 @@ def _large_report(size: int) -> BatchReport:
         ),
         ranked_by_currency={},
     )
+
+
+def test_currency_and_ranked_preview(tmp_path):
+    executor = BatchExecutor(FileCache(tmp_path / "cache"))
+    report = executor.summarize(
+        [
+            SearchOutcome(
+                request_id="r",
+                status="success",
+                elapsed_ms=0,
+                requests_made=0,
+                options=[make_option(90), make_option(1), make_option(100, currency="JPY")],
+            )
+        ]
+    )
+    with pytest.raises(ValueError, match="currency"):
+        collect_matches(report, ShortlistSpec(max_price=95))
+    eur = collect_matches(report, ShortlistSpec(currency="eur", max_price=95))
+    assert [x.option.price for x in eur.matches] == [1, 90]
+    summary = compact_summary(report, "x", tmp_path / "x")
+    assert summary["preview"][0]["price"] == 1
+    assert summary["currencies"] == ["EUR", "JPY"]

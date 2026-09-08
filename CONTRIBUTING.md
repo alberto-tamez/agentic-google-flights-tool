@@ -12,6 +12,50 @@ Before starting a large change, open an issue to check whether it fits the proje
 
 Tests should be offline by default. Mark tests that contact Google with `pytest.mark.live` and run them only when the external request is the point of the test.
 
-Run `uv run python scripts/run_feature_tests.py` for fresh randomized feature cases and latency. Its ignored report includes the seed and replay command.
+Run `uv run python scripts/run_feature_tests.py` for fresh randomized feature cases.
+The runner prints a seed and replay command without saving reports. To retain a run,
+pass `--report /tmp/flight-tests.json`. The JSON includes the seed, failures, and
+per-feature timings. Use `--seed NUMBER` to replay a run.
+
+MCP tests require `uv sync --extra dev --extra mcp`. The local HTTP server test is
+opt-in: `uv run pytest -m integration tests/test_mcp.py`. It does not contact Google.
 
 By contributing, you agree that your contribution will be licensed under the MIT License.
+
+## Repository layout
+
+- `src/reverse_google_flights/` contains the implementation. `api.py`, `cli.py`, and
+  `mcp_server.py` expose it; `exploration.py` and `batch.py` coordinate searches;
+  `providers/` retrieves and parses flights; `models.py`, `filtering.py`, and
+  `views.py` define and compare results; `cache.py` and `store.py` persist them.
+- `tests/` contains offline unit tests. `tests/randomized/` checks the six
+  capabilities listed in `tests/feature_contract.py` with Hypothesis.
+- `docs/` contains the agent guide and technical reference, also bundled into the
+  installed package for `agentic-flights guide`.
+- `skill/agentic-flights/` is the source for the bundled skill installed by
+  `agentic-flights init-skill`.
+- `examples/` contains JSON inputs. Its [index](examples/README.md) explains each.
+- `scripts/` contains the randomized test runner and example-date updater.
+- `packages/agentic-flights/` is a small PyPI alias that depends on the main
+  distribution. It contains no separate flight-search implementation. Keep its
+  version and both dependency pins aligned with the root package when releasing.
+- `.github/workflows/` publishes the main and alias packages to PyPI.
+
+Provider code lives in `src/reverse_google_flights/providers/`:
+
+- `base.py` defines the shared protocol, result, and error types.
+- `browser.py` builds queries and manages browser sessions and page interactions.
+- `parsing.py` reads flight labels, booking totals, and baggage evidence.
+- `traversal.py` tracks flight choices, work budgets, and resumable searches.
+- `fli.py` adapts the optional `flights` library.
+
+`provider.py` keeps existing imports working. Provider implementations import each
+other directly, without going through this compatibility module.
+
+The product and preferred command are `agentic-flights`; the main PyPI distribution
+is `agentic-google-flights-tool`. The Python import remains `reverse_google_flights`
+for compatibility, as do the older CLI aliases and local storage names.
+
+`dist/`, `.venv/`, and test/tool caches are generated locally and ignored by Git.
+Keep one-off evaluations and search exports outside the checkout. Reusable
+regression tests belong in `tests/`.

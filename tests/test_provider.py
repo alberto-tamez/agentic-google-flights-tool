@@ -19,7 +19,7 @@ from reverse_google_flights.provider import (
 
 
 def test_null_wrb_envelope_is_not_a_trustworthy_empty() -> None:
-    body = ")]}'\n\n[[\"wrb.fr\",null,null,null,null,[13]],[\"di\",37]]"
+    body = ')]}\'\n\n[["wrb.fr",null,null,null,null,[13]],["di",37]]'
     assert _has_wrb_payload(body) is False
 
 
@@ -308,3 +308,26 @@ def test_carry_on_count_without_explicit_inclusion_remains_unknown() -> None:
     )
     assert baggage.status == BaggageStatus.UNKNOWN
     assert not _baggage_meets_requirement(baggage, 2)
+
+
+DAY = date(2027, 1, 14)
+
+
+def test_actual_whole_hour_fare():
+    raw = (
+        "From 35 euros.This price does not include overhead bin access. Nonstop flight "
+        "with Vueling. Leaves Barcelona at 3:40 PM on Thursday, January 14 and arrives "
+        "at Paris at 5:40 PM on Thursday, January 14. Total duration 2 hr. Select flight"
+    )
+    option = _parse_browser_label(raw, make_spec("x", DAY), 1)
+    assert option.price == 35 and option.duration_minutes == 120
+
+
+def test_unknown_price_is_preserved():
+    label = (
+        "Total price is unavailable. Nonstop flight with Iberia. Leaves Madrid at 3:40 PM "
+        "on Thursday, January 14 and arrives at London at 5:40 PM on Thursday, January 14. "
+        "Total duration 2 hr. Select flight"
+    )
+    option = _parse_browser_label(label, make_spec("x", DAY), 1)
+    assert option is not None and option.price is None

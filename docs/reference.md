@@ -158,7 +158,7 @@ agentic-flights show RUN_ID RESULT_ID
 
 For MCP, install the `mcp` extra. The optional adapter uses the official MCP Python
 SDK v2 and supports stdio and stateless Streamable HTTP on `127.0.0.1:8000/mcp`.
-It exposes `schema`, `plan`, `explore`, `compare`, `alternatives`, `inspect`, and
+It exposes `schema`, `plan`, `explore`, `compare`, `alternatives`, `inspect`,
 `verify`, and `issues`. It accepts saved run IDs rather than filesystem paths. It is a local
 single-user service; remote multi-user hosting requires authentication and isolated
 stores. Agent-generated loops run in the agent's own execution environment.

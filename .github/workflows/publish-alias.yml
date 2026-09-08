@@ -15,6 +15,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Check alias version and dependency pins
+        run: |
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          main = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          alias = tomllib.loads(Path("packages/agentic-flights/pyproject.toml").read_text())["project"]
+          name, version = main["name"], main["version"]
+          assert alias["version"] == version, "Alias version differs from main package"
+          assert alias["dependencies"] == [f"{name}=={version}"], "Alias dependency differs"
+          assert alias["optional-dependencies"]["mcp"] == [f"{name}[mcp]=={version}"], "MCP pin differs"
+          PY
       - run: python -m pip install build twine
       - run: python -m build packages/agentic-flights --outdir dist
       - run: python -m twine check dist/*

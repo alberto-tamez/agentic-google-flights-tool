@@ -12,5 +12,6 @@
     "duration",
     "departure"
   ],
-  "limit": 5
+  "limit": 5,
+  "currency": "EUR"
 }

@@ -1,6 +1,15 @@
 # Changelog
 
-This project uses semantic versioning once releases begin.
+## 0.4.4
+
+- Split flight providers into focused modules while preserving existing imports.
+- Added 21 previously local regression tests to the maintained test suite.
+- Made randomized test reports opt-in and removed accumulated evaluation output.
+- Simplified examples, corrected outbound discovery settings, and removed ignored
+  browser options.
+- Fixed alias MCP dependency pins and added a release-time consistency check.
+- Shared test setup, fixed month-boundary test dates, and avoided redundant example
+  date rewrites.
 
 ## 0.4.3
 

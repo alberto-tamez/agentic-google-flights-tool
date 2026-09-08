@@ -14,8 +14,7 @@
       "adults": 1,
       "currency": "EUR",
       "language": "en-US",
-      "country": "ES",
-      "max_results": 3
+      "country": "ES"
     }
   ]
 }
