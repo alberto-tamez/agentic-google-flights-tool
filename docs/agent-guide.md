@@ -10,6 +10,10 @@ Chrome or run `python -m playwright install chromium`. Read `agentic-flights gui
 `search`, or `filters` for only the schema you need; `operations` lists the API. For operation inputs, use `agentic-flights guide verify`
 or the corresponding operation name; class introspection is unnecessary.
 
+For durable harness discovery, run `agentic-flights init-skill` in a project. It
+installs this workflow for both Codex and Claude Code. Use `--scope user` for every
+project, or `--harness codex` / `--harness claude` to install only one copy.
+
 ## Plan and explore
 
 Resolve cities to explicit airport choices and relative dates to concrete dates.

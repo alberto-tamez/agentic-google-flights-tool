@@ -27,6 +27,17 @@ Check the installation and print the bundled agent instructions:
 agentic-flights guide
 ```
 
+Install the reusable skill into the current project for both Codex and Claude Code:
+
+```sh
+agentic-flights init-skill
+```
+
+This creates `.agents/skills/agentic-flights/SKILL.md` for Codex and
+`.claude/skills/agentic-flights/SKILL.md` for Claude Code. Install it for every
+project instead with `agentic-flights init-skill --scope user`. Existing customized
+skills are left untouched unless you pass `--force`.
+
 ## Give it to an AI agent
 
 Paste the following into an agent that can run terminal commands, then replace the bracketed text with your trip:

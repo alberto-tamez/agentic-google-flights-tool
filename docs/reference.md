@@ -3,6 +3,23 @@
 Start with the [agent guide](agent-guide.md). The Python API works after installation
 from any directory. CLI aliases and the `reverse_google_flights` import remain compatible.
 
+## Install the harness skill
+
+```sh
+# Current project, both harnesses
+agentic-flights init-skill
+
+# Every project, one harness
+agentic-flights init-skill --scope user --harness codex
+agentic-flights init-skill --scope user --harness claude
+```
+
+Project installs use `.agents/skills/agentic-flights` for Codex and
+`.claude/skills/agentic-flights` for Claude Code. User installs use the corresponding
+folders under the home directory. Run with `--dry-run` to inspect destinations.
+The command is idempotent. It refuses to overwrite a different existing skill unless
+`--force` is explicit.
+
 ## Complete Python workflow
 
 ```python

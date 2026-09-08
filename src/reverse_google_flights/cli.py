@@ -26,7 +26,7 @@ class BatchInput(BaseModel):
     searches: list[SearchSpec] = Field(min_length=1)
     max_workers: int = Field(default=2, ge=1)
     cache_ttl_seconds: int = Field(default=3600, ge=0)
-    ranking_limit: int = Field(default=10, ge=10)
+    ranking_limit: int = Field(default=10, ge=1)
     provider: str = "browser"
 
 
@@ -36,6 +36,8 @@ def run(
     provider_factory: Any = None,
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
+    if arguments and arguments[0] == "init-skill":
+        return _run_init_skill(arguments[1:])
     if arguments and arguments[0] == "guide":
         return _run_guide(arguments[1:])
     if arguments and arguments[0] == "filter":
@@ -50,7 +52,8 @@ def run(
         prog="agentic-flights",
         description="Search Google Flights in bounded batches.",
         epilog=(
-            "Start with: agentic-flights guide. Other commands: filter, summary, list, show. "
+            "Start with: agentic-flights guide. Install an agent skill with init-skill. "
+            "Other commands: filter, summary, list, show. "
             "Run agentic-flights COMMAND --help for details."
         ),
     )
@@ -122,6 +125,41 @@ def run(
                 "max_bytes": 100 * 1024 * 1024,
             }
         print(json.dumps(manifest, indent=2))
+    return 0
+
+
+def _run_init_skill(argv: Sequence[str]) -> int:
+    from reverse_google_flights.skill_init import install_skill
+
+    parser = argparse.ArgumentParser(
+        prog="agentic-flights init-skill",
+        description="Install the Agentic Flights skill for Codex, Claude Code, or both.",
+    )
+    parser.add_argument("--harness", choices=["codex", "claude", "both"], default="both")
+    parser.add_argument("--scope", choices=["project", "user"], default="project")
+    parser.add_argument(
+        "--project-dir",
+        type=Path,
+        help="project receiving the skill; defaults to the current directory",
+    )
+    parser.add_argument("--force", action="store_true", help="replace a different existing skill")
+    parser.add_argument("--dry-run", action="store_true", help="show destinations without writing")
+    args = parser.parse_args(argv)
+    try:
+        result = install_skill(
+            args.harness,
+            args.scope,
+            project_dir=args.project_dir,
+            force=args.force,
+            dry_run=args.dry_run,
+        )
+    except (OSError, ValueError) as exc:
+        print(
+            json.dumps({"error": {"code": "skill_install_failed", "message": str(exc)}}),
+            file=sys.stderr,
+        )
+        return 2
+    print(json.dumps(result, indent=2))
     return 0
 
 

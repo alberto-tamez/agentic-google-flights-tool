@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-google-flights-tool"
-version = "0.3.0"
+version = "0.4.0"
 description = "Explore and compare flight options with AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -63,3 +63,4 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.hatch.build.targets.wheel.force-include]
 "docs/agent-guide.md" = "reverse_google_flights/_docs/agent-guide.md"
 "docs/reference.md" = "reverse_google_flights/_docs/reference.md"
+"skill/agentic-flights/SKILL.md" = "reverse_google_flights/_skill/agentic-flights/SKILL.md"

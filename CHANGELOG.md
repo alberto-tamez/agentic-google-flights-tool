@@ -2,6 +2,12 @@
 
 This project uses semantic versioning once releases begin.
 
+## 0.4.0
+
+- Added `agentic-flights init-skill` to install one bundled Agent Skill for Codex,
+  Claude Code, or both at project or user scope.
+- Kept existing customized skills intact unless the user passes `--force`.
+
 ## 0.3.0
 
 - Added consistent API progress and executable next actions; exploration summaries
