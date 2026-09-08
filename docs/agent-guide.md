@@ -5,8 +5,9 @@ useful alternatives with evidence. After installation, no repository checkout is
 
 ## Start
 
-Use Python 3.11+ and install `agentic-flights`. Use an installed Google
-Chrome or run `python -m playwright install chromium`. Read `agentic-flights guide reference` for the complete Python example. Load `agentic-flights guide space`,
+Use Python 3.11+ and install `agentic-flights`. An installed Google Chrome or
+Playwright Chromium is needed for verification and direct-search fallback. Read
+`agentic-flights guide reference` for the complete Python example. Load `agentic-flights guide space`,
 `search`, or `filters` for only the schema you need; `operations` lists the API. For operation inputs, use `agentic-flights guide verify`
 or the corresponding operation name; class introspection is unnecessary.
 
@@ -19,9 +20,14 @@ project, or `--harness codex` / `--harness claude` to install only one copy.
 Resolve cities to explicit airport choices and relative dates to concrete dates.
 Record travelers, currency, stop and time requirements, baggage, and how the user
 balances price against travel time. Clarify missing information that changes the trip.
+Preserve children and infants separately from adults, and preserve checked bags,
+airline exclusions, connection or layover requirements, emissions preferences,
+self-transfer rules, and basic-economy exclusions when supplied.
 
 Use `AgentAPI.plan` to validate and save a `SearchSpace` without making flight
 requests. `AgentAPI.explore` accepts the saved run ID and returns a new snapshot.
+Its default provider uses direct requests for discovery and browser traversal for
+verification; agents normally should not select a provider themselves.
 Each chunk visits airport pairs and dates broadly and interleaves promising
 unfinished queries. Save the latest run ID. All original queries and continuation
 state are stored with it, so another process can continue.

@@ -8,14 +8,19 @@ license: MIT
 
 Use the installed `agentic-flights` command and `agentic_flights.AgentAPI`.
 Keep full search reports behind their `rgf_...` run IDs; return compact comparisons.
-The tool requires Python 3.11+ and Google Chrome or Playwright Chromium.
+The tool requires Python 3.11+. Chrome or Playwright Chromium is needed when it
+checks final prices and baggage or falls back from direct search.
 
 ## Find flights
 
 1. Resolve cities to explicit airport codes and relative dates to concrete dates.
-   Infer ordinary preferences when reasonable; ask only when missing information
-   would materially change the trip.
+   Preserve adults, children, seated infants, lap infants, cabin, bags, airline
+   inclusions or exclusions, connections, layover windows, emissions preferences,
+   and fare restrictions when the user supplies them. Infer ordinary preferences
+   when reasonable; ask only when missing information would materially change the trip.
 2. Use `AgentAPI.plan()` and `AgentAPI.explore()` in Python for flexible searches.
+   Use the default provider: it chooses fast direct requests for discovery and the
+   browser for final-price and baggage verification.
    Continue while `progress.can_continue` unless the user supplied a real budget
    or the observed options already satisfy their stated goal. A work chunk controls
    one call's latency; it is not a total-search limit.

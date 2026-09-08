@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Updated the bundled Codex and Claude Code skill to use smart provider selection
+  and preserve the expanded passenger, baggage, connection, and fare preferences.
+
 ## 0.6.0
 
 - Replaced the required fast-flights package with an attributed internal Google
