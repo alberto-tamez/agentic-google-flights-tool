@@ -9,7 +9,7 @@ Copy this prompt into Codex or Claude Code and replace the trip details:
 
 ```text
 Install Agentic Flights with:
-`python -m pip install -U agentic-google-flights-tool`
+`python -m pip install -U agentic-flights`
 
 Install its reusable skill for the AI app you are using:
 - Codex: `agentic-flights init-skill --scope user --harness codex`
@@ -31,7 +31,7 @@ Agentic Flights requires Python 3.11 or newer. It uses Google Chrome if installe
 Otherwise, install Chromium:
 
 ```sh
-python -m pip install -U agentic-google-flights-tool
+python -m pip install -U agentic-flights
 python -m playwright install chromium
 ```
 
@@ -61,7 +61,7 @@ The skill is the easiest way to start. The package also has a Python API, a
 command-line interface, and an optional local MCP connection for AI apps:
 
 ```sh
-python -m pip install -U "agentic-google-flights-tool[mcp]"
+python -m pip install -U "agentic-flights[mcp]"
 agentic-flights-mcp
 ```
 
@@ -78,5 +78,5 @@ cannot prove that Google showed every fare. Confirm the price, baggage, and seat
 with the seller. The tool does not book travel.
 
 [Agent guide](docs/agent-guide.md) · [Technical reference](docs/reference.md) ·
-[PyPI](https://pypi.org/project/agentic-google-flights-tool/) ·
+[PyPI](https://pypi.org/project/agentic-flights/) ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)

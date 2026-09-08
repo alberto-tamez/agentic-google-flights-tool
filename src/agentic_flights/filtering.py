@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from reverse_google_flights.models import BatchReport, FlightOption, RankedFlight, SearchSpec
+from agentic_flights.models import BatchReport, FlightOption, RankedFlight, SearchSpec
 
 
 class SortKey(StrEnum):

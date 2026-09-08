@@ -9,10 +9,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from reverse_google_flights.batch import BatchExecutor
-from reverse_google_flights.models import SCHEMA_VERSION, SearchSpec
-from reverse_google_flights.store import ManagedStore
-from reverse_google_flights.views import compact_summary, load_report
+from agentic_flights.batch import BatchExecutor
+from agentic_flights.models import SCHEMA_VERSION, SearchSpec
+from agentic_flights.store import ManagedStore
+from agentic_flights.views import compact_summary, load_report
 
 
 class SearchSpace(BaseModel):

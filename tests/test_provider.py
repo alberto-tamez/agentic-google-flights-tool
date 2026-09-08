@@ -5,8 +5,8 @@ from datetime import UTC, date, datetime
 import pytest
 from conftest import make_spec
 
-from reverse_google_flights.models import BaggageStatus
-from reverse_google_flights.provider import (
+from agentic_flights.models import BaggageStatus
+from agentic_flights.provider import (
     ProviderError,
     _baggage_meets_requirement,
     _has_wrb_payload,

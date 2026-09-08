@@ -1,7 +1,7 @@
 # Technical reference
 
 Start with the [agent guide](agent-guide.md). The Python API works after installation
-from any directory. CLI aliases and the `reverse_google_flights` import remain compatible.
+from any directory. Import `agentic_flights` and run the `agentic-flights` command.
 
 ## Install the harness skill
 
@@ -32,7 +32,7 @@ installed skill.
 
 ```python
 from datetime import date, timedelta
-from reverse_google_flights import AgentAPI, SearchSpace, SearchSpec
+from agentic_flights import AgentAPI, SearchSpace, SearchSpec
 
 api = AgentAPI()
 departure = date.today() + timedelta(days=60)

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from reverse_google_flights.cli import run
-from reverse_google_flights.skill_init import install_skill, skill_destinations
+from agentic_flights.cli import run
+from agentic_flights.skill_init import install_skill, skill_destinations
 
 
 def test_project_skill_installs_for_both_harnesses(tmp_path: Path) -> None:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from reverse_google_flights.models import SCHEMA_VERSION, FlightOption, SearchCoverage, SearchSpec
+from agentic_flights.models import SCHEMA_VERSION, FlightOption, SearchCoverage, SearchSpec
 
 DEFAULT_NAMESPACE = "fli-0.10.0"
 

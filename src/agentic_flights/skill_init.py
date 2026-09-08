@@ -49,7 +49,7 @@ def install_skill(
 ) -> dict[str, object]:
     """Copy the bundled skill, preserving existing customizations unless forced."""
     destinations = skill_destinations(harness, scope, project_dir=project_dir)
-    source = files("reverse_google_flights").joinpath("_skill", "agentic-flights")
+    source = files("agentic_flights").joinpath("_skill", "agentic-flights")
     if not source.is_dir():
         source = Path(__file__).resolve().parents[2] / "skill" / "agentic-flights"
     with as_file(source.joinpath("SKILL.md")) as skill_file:

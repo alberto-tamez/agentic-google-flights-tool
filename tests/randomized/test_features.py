@@ -9,12 +9,12 @@ from fast_flights import FlightQuery, Passengers, create_query
 from hypothesis import given
 from hypothesis import strategies as st
 
-from reverse_google_flights import AgentAPI, BatchExecutor, SearchSpace
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.cli import run
-from reverse_google_flights.filtering import ShortlistSpec, collect_matches
-from reverse_google_flights.mcp_server import _handler
-from reverse_google_flights.models import (
+from agentic_flights import AgentAPI, BatchExecutor, SearchSpace
+from agentic_flights.cache import FileCache
+from agentic_flights.cli import run
+from agentic_flights.filtering import ShortlistSpec, collect_matches
+from agentic_flights.mcp_server import _handler
+from agentic_flights.models import (
     BaggageAllowance,
     BatchCounts,
     BatchReport,
@@ -24,13 +24,13 @@ from reverse_google_flights.models import (
     SearchOutcome,
     SearchSpec,
 )
-from reverse_google_flights.provider import (
+from agentic_flights.provider import (
     ProviderResult,
     _build_browser_query,
     _parse_browser_label,
 )
-from reverse_google_flights.skill_init import install_skill
-from reverse_google_flights.store import ManagedStore
+from agentic_flights.skill_init import install_skill
+from agentic_flights.store import ManagedStore
 
 AIRPORTS = (
     "AMS",

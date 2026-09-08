@@ -4,8 +4,8 @@ from datetime import timedelta
 
 from conftest import make_option, make_spec
 
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.models import SearchCoverage
+from agentic_flights.cache import FileCache
+from agentic_flights.models import SearchCoverage
 
 
 def test_cache_key_includes_every_search_criterion(tmp_path, future_date) -> None:

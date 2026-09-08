@@ -6,9 +6,9 @@ from datetime import date, timedelta
 
 from conftest import make_option, make_spec
 
-from reverse_google_flights.batch import BatchExecutor
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.provider import ProviderError, ProviderResult
+from agentic_flights.batch import BatchExecutor
+from agentic_flights.cache import FileCache
+from agentic_flights.provider import ProviderError, ProviderResult
 
 
 class ConcurrencyTracker:

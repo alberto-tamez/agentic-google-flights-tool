@@ -2,12 +2,12 @@
 
 Implementation lives in providers/, separated by responsibility."""
 
-from reverse_google_flights.providers.base import (
+from agentic_flights.providers.base import (
     Provider,
     ProviderError,
     ProviderResult,
 )
-from reverse_google_flights.providers.browser import (
+from agentic_flights.providers.browser import (
     _RESULT_SELECTOR,
     BrowserProvider,
     _build_browser_query,
@@ -19,14 +19,14 @@ from reverse_google_flights.providers.browser import (
     _search_discovery_browser,
     _select_label,
 )
-from reverse_google_flights.providers.fli import (
+from agentic_flights.providers.fli import (
     FliProvider,
     _CapturingClient,
     _enum_code,
     _has_wrb_payload,
     _normalize_option,
 )
-from reverse_google_flights.providers.parsing import (
+from agentic_flights.providers.parsing import (
     _RESULT_RE,
     _baggage_meets_requirement,
     _choice_identity,
@@ -41,7 +41,7 @@ from reverse_google_flights.providers.parsing import (
     _parse_selected_booking_option,
     _validate_booking_routes,
 )
-from reverse_google_flights.providers.traversal import (
+from agentic_flights.providers.traversal import (
     _BudgetExhausted,
     _complete_quote_key,
     _complete_result,

@@ -5,16 +5,16 @@ import json
 import pytest
 from conftest import make_option
 
-from reverse_google_flights import BatchExecutor
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.filtering import ShortlistSpec, collect_matches
-from reverse_google_flights.models import (
+from agentic_flights import BatchExecutor
+from agentic_flights.cache import FileCache
+from agentic_flights.filtering import ShortlistSpec, collect_matches
+from agentic_flights.models import (
     BatchCounts,
     BatchReport,
     SearchCoverage,
     SearchOutcome,
 )
-from reverse_google_flights.views import compact_summary, list_page, show_results
+from agentic_flights.views import compact_summary, list_page, show_results
 
 
 def test_default_summary_stays_bounded_for_a_thousand_options(tmp_path) -> None:

@@ -5,7 +5,7 @@ useful alternatives with evidence. After installation, no repository checkout is
 
 ## Start
 
-Use Python 3.11+ and install `agentic-google-flights-tool`. Use an installed Google
+Use Python 3.11+ and install `agentic-flights`. Use an installed Google
 Chrome or run `python -m playwright install chromium`. Read `agentic-flights guide reference` for the complete Python example. Load `agentic-flights guide space`,
 `search`, or `filters` for only the schema you need; `operations` lists the API. For operation inputs, use `agentic-flights guide verify`
 or the corresponding operation name; class introspection is unnecessary.
@@ -78,6 +78,6 @@ No tool can prove Google's entire inventory was exposed. Do not book tickets.
 
 ## MCP
 
-Install `agentic-google-flights-tool[mcp]`. Run `agentic-flights-mcp` for stdio or
+Install `agentic-flights[mcp]`. Run `agentic-flights-mcp` for stdio or
 `agentic-flights-mcp --transport streamable-http` for local HTTP. The same operations
 use explicit saved handles with no session dependency. Call `schema` on demand.

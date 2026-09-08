@@ -8,8 +8,8 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "agentic-google-flights-tool"
-version = "0.4.4"
+name = "agentic-flights"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "fast-flights" },

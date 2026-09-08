@@ -4,9 +4,9 @@ import json
 
 from conftest import make_option
 
-from reverse_google_flights.cli import run
-from reverse_google_flights.filtering import ShortlistSpec, build_shortlist
-from reverse_google_flights.models import (
+from agentic_flights.cli import run
+from agentic_flights.filtering import ShortlistSpec, build_shortlist
+from agentic_flights.models import (
     BatchCounts,
     BatchReport,
     SearchCoverage,
@@ -58,7 +58,7 @@ def test_filter_cli_uses_saved_json_and_makes_no_provider_call(
         raise AssertionError("offline filter called the provider")
 
     monkeypatch.setattr(
-        "reverse_google_flights.provider.BrowserProvider.search", fail_if_called
+        "agentic_flights.provider.BrowserProvider.search", fail_if_called
     )
     assert run(
         ["filter", str(source_path), str(filters_path), "--output", str(output_path)]

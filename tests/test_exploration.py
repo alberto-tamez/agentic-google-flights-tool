@@ -6,8 +6,8 @@ from datetime import date
 import pytest
 from conftest import make_option, make_spec
 
-from reverse_google_flights.models import BaggageAllowance, BaggageStatus, SearchCoverage
-from reverse_google_flights.provider import (
+from agentic_flights.models import BaggageAllowance, BaggageStatus, SearchCoverage
+from agentic_flights.provider import (
     ProviderError,
     _BudgetExhausted,
     _complete_result,

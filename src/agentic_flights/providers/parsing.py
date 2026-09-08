@@ -6,7 +6,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Any
 
-from reverse_google_flights.models import (
+from agentic_flights.models import (
     BaggageAllowance,
     BaggageStatus,
     FlightLeg,
@@ -14,7 +14,7 @@ from reverse_google_flights.models import (
     SearchCoverage,
     SearchSpec,
 )
-from reverse_google_flights.providers.base import (
+from agentic_flights.providers.base import (
     ProviderError,
 )
 

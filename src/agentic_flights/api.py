@@ -9,14 +9,14 @@ from typing import Any, get_type_hints
 
 from pydantic import create_model
 
-from reverse_google_flights.batch import BatchExecutor
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.exploration import Exploration, SearchSpace
-from reverse_google_flights.filtering import ShortlistSpec, collect_matches
-from reverse_google_flights.models import FlightOption, RankedFlight, SearchSpec
-from reverse_google_flights.provider import BrowserProvider
-from reverse_google_flights.store import RUN_ID, ManagedStore
-from reverse_google_flights.views import (
+from agentic_flights.batch import BatchExecutor
+from agentic_flights.cache import FileCache
+from agentic_flights.exploration import Exploration, SearchSpace
+from agentic_flights.filtering import ShortlistSpec, collect_matches
+from agentic_flights.models import FlightOption, RankedFlight, SearchSpec
+from agentic_flights.provider import BrowserProvider
+from agentic_flights.store import RUN_ID, ManagedStore
+from agentic_flights.views import (
     _result_id,
     compact_summary,
     list_page,
@@ -69,7 +69,7 @@ class AgentAPI:
 
     def _respond(self, report, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Common state and executable next actions across every data operation."""
-        from reverse_google_flights.views import _coverage_complete
+        from agentic_flights.views import _coverage_complete
 
         state = report.exploration_state or {}
         total = (
@@ -281,7 +281,7 @@ class AgentAPI:
         cursor: str | None = None,
     ) -> dict[str, Any]:
         """Page through observed tradeoff IDs; never compare partial and complete tickets."""
-        from reverse_google_flights.views import _decode_cursor, _encode_cursor
+        from agentic_flights.views import _decode_cursor, _encode_cursor
 
         if page_size < 1:
             raise ValueError("page_size must be positive")

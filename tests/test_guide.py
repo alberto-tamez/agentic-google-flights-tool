@@ -1,6 +1,6 @@
 import json
 
-from reverse_google_flights.cli import run
+from agentic_flights.cli import run
 
 
 def test_guide_explains_installed_workflow(capsys):

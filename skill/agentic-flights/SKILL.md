@@ -6,7 +6,7 @@ license: MIT
 
 # Agentic Flights
 
-Use the installed `agentic-flights` command and `reverse_google_flights.AgentAPI`.
+Use the installed `agentic-flights` command and `agentic_flights.AgentAPI`.
 Keep full search reports behind their `rgf_...` run IDs; return compact comparisons.
 The tool requires Python 3.11+ and Google Chrome or Playwright Chromium.
 
@@ -35,4 +35,4 @@ The tool requires Python 3.11+ and Google Chrome or Playwright Chromium.
   the full report.
 
 If the command is unavailable, install it with
-`python -m pip install agentic-google-flights-tool`.
+`python -m pip install agentic-flights`.

@@ -9,9 +9,9 @@ from datetime import date
 import pytest
 from conftest import make_option, make_spec
 
-from reverse_google_flights.cli import run
-from reverse_google_flights.provider import ProviderResult
-from reverse_google_flights.store import ManagedStore, StoreError, StorePolicy
+from agentic_flights.cli import run
+from agentic_flights.provider import ProviderResult
+from agentic_flights.store import ManagedStore, StoreError, StorePolicy
 
 
 def test_managed_store_enforces_ttl_and_run_count_inside_owned_root(tmp_path) -> None:

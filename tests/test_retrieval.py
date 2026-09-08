@@ -6,8 +6,8 @@ from datetime import UTC, date, datetime
 from conftest import make_spec
 from fast_flights import FlightQuery, Passengers, create_query
 
-from reverse_google_flights.models import SearchCoverage
-from reverse_google_flights.provider import (
+from agentic_flights.models import SearchCoverage
+from agentic_flights.provider import (
     _build_browser_query,
     _load_source_labels,
     _parse_discovery_options,
@@ -147,7 +147,7 @@ DAY = date(2027, 1, 14)
 def test_detached_more_button_recovers():
     from test_retrieval import _FakePage
 
-    from reverse_google_flights.provider import _load_source_labels
+    from agentic_flights.provider import _load_source_labels
 
     page = _FakePage([["a"], ["a", "b"]])
     original = page.get_by_role

@@ -3,11 +3,11 @@ from datetime import timedelta
 import pytest
 from conftest import make_option, make_spec
 
-from reverse_google_flights import BatchExecutor, Exploration, SearchSpace
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.provider import ProviderError, ProviderResult
-from reverse_google_flights.store import ManagedStore
-from reverse_google_flights.views import load_report
+from agentic_flights import BatchExecutor, Exploration, SearchSpace
+from agentic_flights.cache import FileCache
+from agentic_flights.provider import ProviderError, ProviderResult
+from agentic_flights.store import ManagedStore
+from agentic_flights.views import load_report
 
 
 def space_for(day, **updates):

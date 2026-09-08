@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from reverse_google_flights.filtering import ShortlistSpec, collect_matches
-from reverse_google_flights.models import BatchReport, RankedFlight, SearchSpec
+from agentic_flights.filtering import ShortlistSpec, collect_matches
+from agentic_flights.models import BatchReport, RankedFlight, SearchSpec
 
 
 def load_report(path: Path) -> tuple[BatchReport, str]:

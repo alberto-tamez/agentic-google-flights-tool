@@ -7,14 +7,14 @@ from datetime import date
 import pytest
 from conftest import make_api, make_spec
 
-from reverse_google_flights import SearchSpace
+from agentic_flights import SearchSpace
 
 DAY = date(2027, 1, 14)
 
 
 def test_mcp_in_memory_schema_and_plan(tmp_path):
     Client = pytest.importorskip("mcp").Client
-    from reverse_google_flights.mcp_server import create_server
+    from agentic_flights.mcp_server import create_server
 
     api = make_api(tmp_path)
 
@@ -41,7 +41,7 @@ def test_stateless_http_across_client_connections(tmp_path):
 
     uvicorn = pytest.importorskip("uvicorn")
     Client = pytest.importorskip("mcp").Client
-    from reverse_google_flights.mcp_server import create_server
+    from agentic_flights.mcp_server import create_server
 
     async def check():
         sock = socket.socket()
@@ -79,7 +79,7 @@ def test_stateless_http_across_client_connections(tmp_path):
 
 def test_mcp_errors_can_be_repaired_and_schemas_are_discoverable(tmp_path):
     Client = pytest.importorskip("mcp").Client
-    from reverse_google_flights.mcp_server import create_server
+    from agentic_flights.mcp_server import create_server
 
     async def check():
         async with Client(create_server(make_api(tmp_path))) as c:

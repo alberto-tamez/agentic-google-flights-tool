@@ -7,17 +7,17 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from reverse_google_flights.models import (
+from agentic_flights.models import (
     FlightOption,
     SearchCoverage,
     SearchError,
     SearchSpec,
 )
-from reverse_google_flights.providers.base import (
+from agentic_flights.providers.base import (
     ProviderError,
     ProviderResult,
 )
-from reverse_google_flights.providers.parsing import (
+from agentic_flights.providers.parsing import (
     _baggage_meets_requirement,
     _choice_identity,
     _parse_browser_label,

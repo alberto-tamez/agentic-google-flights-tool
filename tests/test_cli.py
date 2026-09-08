@@ -5,8 +5,8 @@ from datetime import date
 
 from conftest import make_option, make_spec
 
-from reverse_google_flights.cli import run
-from reverse_google_flights.provider import ProviderResult
+from agentic_flights.cli import run
+from agentic_flights.provider import ProviderResult
 
 
 def test_cli_reads_json_and_prints_machine_readable_report(tmp_path, capsys) -> None:

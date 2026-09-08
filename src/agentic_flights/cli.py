@@ -11,13 +11,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from reverse_google_flights.batch import BatchExecutor
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.filtering import ShortlistSpec
-from reverse_google_flights.models import SearchSpec
-from reverse_google_flights.provider import BrowserProvider, FliProvider
-from reverse_google_flights.store import ManagedStore, StoreError
-from reverse_google_flights.views import compact_summary, list_page, load_report, show_results
+from agentic_flights.batch import BatchExecutor
+from agentic_flights.cache import FileCache
+from agentic_flights.filtering import ShortlistSpec
+from agentic_flights.models import SearchSpec
+from agentic_flights.provider import BrowserProvider, FliProvider
+from agentic_flights.store import ManagedStore, StoreError
+from agentic_flights.views import compact_summary, list_page, load_report, show_results
 
 
 class BatchInput(BaseModel):
@@ -127,7 +127,7 @@ def run(
 
 
 def _run_init_skill(argv: Sequence[str]) -> int:
-    from reverse_google_flights.skill_init import install_skill
+    from agentic_flights.skill_init import install_skill
 
     parser = argparse.ArgumentParser(
         prog="agentic-flights init-skill",
@@ -186,14 +186,14 @@ def _run_guide(argv: Sequence[str]) -> int:
     )
     args = parser.parse_args(argv)
     if args.topic not in {"start", "reference", "schema"}:
-        from reverse_google_flights.api import AgentAPI
+        from agentic_flights.api import AgentAPI
 
         print(json.dumps(AgentAPI().schema(args.topic), indent=2))
     elif args.topic == "schema":
         print(json.dumps(BatchInput.model_json_schema(), indent=2))
     else:
         name = "reference.md" if args.topic == "reference" else "agent-guide.md"
-        resource = files("reverse_google_flights").joinpath("_docs", name)
+        resource = files("agentic_flights").joinpath("_docs", name)
         if resource.is_file():
             print(resource.read_text(encoding="utf-8"))
         else:

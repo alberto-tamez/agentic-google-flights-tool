@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from reverse_google_flights.models import (
+from agentic_flights.models import (
     FlightOption,
     SearchCoverage,
     SearchSpec,

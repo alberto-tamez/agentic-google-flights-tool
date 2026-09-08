@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, SimpleQueue
 from time import monotonic
 
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.models import (
+from agentic_flights.cache import FileCache
+from agentic_flights.models import (
     BatchCounts,
     BatchReport,
     RankedFlight,
@@ -16,7 +16,7 @@ from reverse_google_flights.models import (
     SearchOutcome,
     SearchSpec,
 )
-from reverse_google_flights.provider import BrowserProvider, Provider, ProviderError
+from agentic_flights.provider import BrowserProvider, Provider, ProviderError
 
 ProviderFactory = Callable[[], Provider]
 

@@ -3,8 +3,8 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentic-google-flights-tool"
-version = "0.4.4"
+name = "agentic-flights"
+version = "0.5.0"
 description = "Explore and compare flight options with AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -41,13 +41,11 @@ Repository = "https://github.com/alberto-tamez/agentic-google-flights-tool"
 Issues = "https://github.com/alberto-tamez/agentic-google-flights-tool/issues"
 
 [project.scripts]
-agentic-flights-mcp = "reverse_google_flights.mcp_server:main"
-agentic-flights = "reverse_google_flights.cli:main"
-advanced-google-flights-tool = "reverse_google_flights.cli:main"
-reverse-google-flights = "reverse_google_flights.cli:main"
+agentic-flights-mcp = "agentic_flights.mcp_server:main"
+agentic-flights = "agentic_flights.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/reverse_google_flights"]
+packages = ["src/agentic_flights"]
 
 [tool.pytest.ini_options]
 addopts = "-q -m 'not integration and not live'"
@@ -66,6 +64,6 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"docs/agent-guide.md" = "reverse_google_flights/_docs/agent-guide.md"
-"docs/reference.md" = "reverse_google_flights/_docs/reference.md"
-"skill/agentic-flights/SKILL.md" = "reverse_google_flights/_skill/agentic-flights/SKILL.md"
+"docs/agent-guide.md" = "agentic_flights/_docs/agent-guide.md"
+"docs/reference.md" = "agentic_flights/_docs/reference.md"
+"skill/agentic-flights/SKILL.md" = "agentic_flights/_skill/agentic-flights/SKILL.md"

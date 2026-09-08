@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from reverse_google_flights.models import (
+from agentic_flights.models import (
     FlightLeg,
     FlightOption,
     SearchSpec,
 )
-from reverse_google_flights.providers.base import (
+from agentic_flights.providers.base import (
     ProviderError,
     ProviderResult,
 )
@@ -54,7 +54,7 @@ class FliProvider:
         except ImportError as exc:
             raise ProviderError(
                 "provider_unavailable",
-                "The flights dependency is missing. Install agentic-google-flights-tool[fli].",
+                "The flights dependency is missing. Install agentic-flights[fli].",
             ) from exc
 
         try:

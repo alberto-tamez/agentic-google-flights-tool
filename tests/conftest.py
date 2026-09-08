@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 from feature_contract import FEATURES
 
-from reverse_google_flights import AgentAPI, BatchExecutor
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.models import FlightLeg, FlightOption, SearchCoverage, SearchSpec
-from reverse_google_flights.provider import ProviderResult
-from reverse_google_flights.store import ManagedStore
+from agentic_flights import AgentAPI, BatchExecutor
+from agentic_flights.cache import FileCache
+from agentic_flights.models import FlightLeg, FlightOption, SearchCoverage, SearchSpec
+from agentic_flights.provider import ProviderResult
+from agentic_flights.store import ManagedStore
 
 RANDOMIZED_FEATURES = set(FEATURES)
 _FEATURE_RESULTS: list[dict[str, object]] = []

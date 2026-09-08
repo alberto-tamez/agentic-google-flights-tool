@@ -5,13 +5,13 @@ from datetime import date, datetime
 import pytest
 from conftest import make_api, make_option, make_spec
 
-from reverse_google_flights import AgentAPI, BatchExecutor, SearchSpace
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.models import BaggageAllowance, SearchCoverage, SearchOutcome
-from reverse_google_flights.provider import (
+from agentic_flights import AgentAPI, BatchExecutor, SearchSpace
+from agentic_flights.cache import FileCache
+from agentic_flights.models import BaggageAllowance, SearchCoverage, SearchOutcome
+from agentic_flights.provider import (
     ProviderResult,
 )
-from reverse_google_flights.store import ManagedStore
+from agentic_flights.store import ManagedStore
 
 DAY = date(2027, 1, 14)
 

@@ -24,7 +24,7 @@ By contributing, you agree that your contribution will be licensed under the MIT
 
 ## Repository layout
 
-- `src/reverse_google_flights/` contains the implementation. `api.py`, `cli.py`, and
+- `src/agentic_flights/` contains the implementation. `api.py`, `cli.py`, and
   `mcp_server.py` expose it; `exploration.py` and `batch.py` coordinate searches;
   `providers/` retrieves and parses flights; `models.py`, `filtering.py`, and
   `views.py` define and compare results; `cache.py` and `store.py` persist them.
@@ -36,12 +36,11 @@ By contributing, you agree that your contribution will be licensed under the MIT
   `agentic-flights init-skill`.
 - `examples/` contains JSON inputs. Its [index](examples/README.md) explains each.
 - `scripts/` contains the randomized test runner and example-date updater.
-- `packages/agentic-flights/` is a small PyPI alias that depends on the main
-  distribution. It contains no separate flight-search implementation. Keep its
-  version and both dependency pins aligned with the root package when releasing.
-- `.github/workflows/` publishes the main and alias packages to PyPI.
+- `.github/workflows/` tests, builds, and publishes `agentic-flights` on release.
+  The `publish-alias.yml` filename is retained because PyPI's trusted publisher
+  is registered to that filename; it now publishes the standalone package.
 
-Provider code lives in `src/reverse_google_flights/providers/`:
+Provider code lives in `src/agentic_flights/providers/`:
 
 - `base.py` defines the shared protocol, result, and error types.
 - `browser.py` builds queries and manages browser sessions and page interactions.
@@ -52,9 +51,9 @@ Provider code lives in `src/reverse_google_flights/providers/`:
 `provider.py` keeps existing imports working. Provider implementations import each
 other directly, without going through this compatibility module.
 
-The product and preferred command are `agentic-flights`; the main PyPI distribution
-is `agentic-google-flights-tool`. The Python import remains `reverse_google_flights`
-for compatibility, as do the older CLI aliases and local storage names.
+The PyPI distribution and CLI are `agentic-flights`; the Python import is
+`agentic_flights`. Local storage names retain their original spelling so existing
+saved searches remain accessible.
 
 `dist/`, `.venv/`, and test/tool caches are generated locally and ignored by Git.
 Keep one-off evaluations and search exports outside the checkout. Reusable

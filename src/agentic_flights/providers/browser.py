@@ -6,21 +6,21 @@ from asyncio import Runner, wait_for
 from datetime import UTC, datetime
 from typing import Any
 
-from reverse_google_flights.models import (
+from agentic_flights.models import (
     FlightOption,
     SearchCoverage,
     SearchSpec,
 )
-from reverse_google_flights.providers.base import (
+from agentic_flights.providers.base import (
     ProviderError,
     ProviderResult,
 )
-from reverse_google_flights.providers.parsing import (
+from agentic_flights.providers.parsing import (
     _choice_identity,
     _parse_complete_itinerary,
     _parse_discovery_options,
 )
-from reverse_google_flights.providers.traversal import (
+from agentic_flights.providers.traversal import (
     _BudgetExhausted,
     _complete_result,
     _consume_transition,

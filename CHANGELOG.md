@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+- Made `agentic-flights` the standalone distribution, with no dependency on the
+  former package. Removed the alias package and duplicate publishing workflow.
+- Renamed the Python import to `agentic_flights`. Existing scripts must update
+  imports from `reverse_google_flights`.
+- Removed the `reverse-google-flights` and `advanced-google-flights-tool` CLI
+  aliases. Use `agentic-flights`; the optional MCP command is `agentic-flights-mcp`.
+- Kept existing local storage paths so saved searches remain accessible.
+- Added tests and lint checks to the release workflow before publication.
+
 ## 0.4.4
 
 - Split flight providers into focused modules while preserving existing imports.

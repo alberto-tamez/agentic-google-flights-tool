@@ -9,7 +9,7 @@ from typing import Any, Literal, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from reverse_google_flights.api import AgentAPI
+from agentic_flights.api import AgentAPI
 
 
 class NextAction(BaseModel):
@@ -102,7 +102,7 @@ def create_server(api: AgentAPI | None = None):
     try:
         from mcp.server import MCPServer
     except ImportError as exc:
-        raise RuntimeError("Install agentic-google-flights-tool[mcp] to use MCP") from exc
+        raise RuntimeError("Install agentic-flights[mcp] to use MCP") from exc
     api = api or AgentAPI()
     server = MCPServer(
         "Agentic Flights",

@@ -4,7 +4,7 @@ import pytest
 from conftest import make_option, make_spec
 from pydantic import ValidationError
 
-from reverse_google_flights.models import SearchError, SearchOutcome
+from agentic_flights.models import SearchError, SearchOutcome
 
 
 def test_search_spec_normalizes_codes_and_rejects_invalid_route(future_date) -> None:
