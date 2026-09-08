@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
 
-SCHEMA_VERSION = "6"
+SCHEMA_VERSION = "7"
 
 
 class Cabin(StrEnum):
@@ -33,13 +33,18 @@ class SegmentFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     airlines: list[str] = Field(default_factory=list)
+    excluded_airlines: list[str] = Field(default_factory=list)
     earliest_departure_hour: int | None = Field(default=None, ge=0, le=23)
     latest_departure_hour: int | None = Field(default=None, ge=0, le=23)
     earliest_arrival_hour: int | None = Field(default=None, ge=0, le=23)
     latest_arrival_hour: int | None = Field(default=None, ge=0, le=23)
     max_duration_minutes: int | None = Field(default=None, ge=1)
+    connecting_airports: list[str] = Field(default_factory=list)
+    min_layover_minutes: int | None = Field(default=None, ge=0)
+    max_layover_minutes: int | None = Field(default=None, ge=0)
+    less_emissions_only: bool = False
 
-    @field_validator("airlines")
+    @field_validator("airlines", "excluded_airlines")
     @classmethod
     def validate_airlines(cls, values: list[str]) -> list[str]:
         normalized = [value.upper() for value in values]
@@ -51,6 +56,11 @@ class SegmentFilters(BaseModel):
             raise ValueError("airlines must contain IATA codes or alliance identifiers")
         return list(dict.fromkeys(normalized))
 
+    @field_validator("connecting_airports")
+    @classmethod
+    def validate_connecting_airports(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(SearchSpec.validate_airport(value.strip()) for value in values))
+
     @model_validator(mode="after")
     def validate_windows(self) -> SegmentFilters:
         windows = (
@@ -60,6 +70,12 @@ class SegmentFilters(BaseModel):
         for earliest, latest, name in windows:
             if earliest is not None and latest is not None and earliest > latest:
                 raise ValueError(f"{name} hour window cannot wrap past midnight")
+        if (
+            self.min_layover_minutes is not None
+            and self.max_layover_minutes is not None
+            and self.min_layover_minutes > self.max_layover_minutes
+        ):
+            raise ValueError("layover duration window must be ordered")
         return self
 
 
@@ -100,8 +116,14 @@ class SearchSpec(BaseModel):
     cabin: Cabin = Cabin.ECONOMY
     max_stops: MaxStops = MaxStops.ANY
     adults: int = Field(default=1, ge=1, le=9)
+    children: int = Field(default=0, ge=0)
+    infants_in_seat: int = Field(default=0, ge=0)
+    infants_on_lap: int = Field(default=0, ge=0)
     overhead_cabin_bags: int = Field(default=0, ge=0, le=9)
+    checked_bags: int = Field(default=0, ge=0, le=9)
     require_overhead_cabin_bag: bool = False
+    hide_separate_and_self_transfer: bool = False
+    exclude_basic_economy: bool = False
     currency: str
     language: str = Field(min_length=2, max_length=35)
     country: str
@@ -168,6 +190,11 @@ class SearchSpec(BaseModel):
             raise ValueError(
                 "overhead_cabin_bags must be at least 1 when require_overhead_cabin_bag is true"
             )
+        passengers = self.adults + self.children + self.infants_in_seat + self.infants_on_lap
+        if passengers > 9:
+            raise ValueError("Google Flights supports at most 9 travelers in one search")
+        if self.infants_on_lap > self.adults:
+            raise ValueError("each lap infant requires an adult traveler")
         if self.search_mode == "discover" and self.require_overhead_cabin_bag:
             raise ValueError("discover mode cannot require verified overhead cabin baggage")
         if any(offset < 0 for offset in self.stage_candidate_offsets):

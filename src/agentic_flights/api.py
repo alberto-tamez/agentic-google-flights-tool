@@ -14,7 +14,7 @@ from agentic_flights.cache import FileCache
 from agentic_flights.exploration import Exploration, SearchSpace
 from agentic_flights.filtering import ShortlistSpec, collect_matches
 from agentic_flights.models import FlightOption, RankedFlight, SearchSpec
-from agentic_flights.provider import BrowserProvider
+from agentic_flights.provider import SmartProvider
 from agentic_flights.store import RUN_ID, ManagedStore
 from agentic_flights.views import (
     _result_id,
@@ -46,8 +46,8 @@ class AgentAPI:
         self.store = store or ManagedStore()
         self.executor = executor or BatchExecutor(
             FileCache(
-                self.store.provider_cache / "browser",
-                namespace=BrowserProvider.version,
+                self.store.provider_cache / "smart",
+                namespace=SmartProvider.version,
             )
         )
 

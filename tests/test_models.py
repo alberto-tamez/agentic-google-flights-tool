@@ -59,6 +59,30 @@ def test_discovery_cannot_silently_defer_a_hard_baggage_requirement(future_date)
         make_spec("bag", future_date, require_overhead_cabin_bag=True)
 
 
+def test_passenger_and_layover_relationships_are_validated(future_date) -> None:
+    family = make_spec(
+        "family",
+        future_date,
+        adults=2,
+        children=2,
+        infants_in_seat=1,
+        infants_on_lap=1,
+        checked_bags=2,
+    )
+    assert family.adults + family.children + family.infants_in_seat + family.infants_on_lap == 6
+
+    with pytest.raises(ValidationError, match="9 travelers"):
+        make_spec("crowd", future_date, adults=8, children=2)
+    with pytest.raises(ValidationError, match="lap infant"):
+        make_spec("infants", future_date, adults=1, infants_on_lap=2)
+    with pytest.raises(ValidationError, match="layover duration window"):
+        make_spec(
+            "layover",
+            future_date,
+            segment_filters={"min_layover_minutes": 180, "max_layover_minutes": 60},
+        )
+
+
 @pytest.mark.parametrize(
     ("status", "options", "error"),
     [

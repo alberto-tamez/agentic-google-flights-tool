@@ -15,7 +15,7 @@ from agentic_flights.batch import BatchExecutor
 from agentic_flights.cache import FileCache
 from agentic_flights.filtering import ShortlistSpec
 from agentic_flights.models import SearchSpec
-from agentic_flights.provider import BrowserProvider, FliProvider
+from agentic_flights.provider import BrowserProvider, DirectProvider, SmartProvider
 from agentic_flights.store import ManagedStore, StoreError
 from agentic_flights.views import compact_summary, list_page, load_report, show_results
 
@@ -27,7 +27,7 @@ class BatchInput(BaseModel):
     max_workers: int = Field(default=2, ge=1)
     cache_ttl_seconds: int = Field(default=3600, ge=0)
     ranking_limit: int = Field(default=10, ge=1)
-    provider: str = "browser"
+    provider: str = "smart"
 
 
 def run(
@@ -74,9 +74,13 @@ def run(
         if isinstance(raw, list):
             raw = {"searches": raw}
         batch_input = BatchInput.model_validate(raw)
-        providers = {"browser": BrowserProvider, "fli": FliProvider}
+        providers = {
+            "smart": SmartProvider,
+            "direct": DirectProvider,
+            "browser": BrowserProvider,
+        }
         if batch_input.provider not in providers:
-            raise ValueError("provider must be 'browser' or 'fli'")
+            raise ValueError("provider must be 'smart', 'direct', or 'browser'")
         selected_factory = provider_factory or providers[batch_input.provider]
         namespace = getattr(selected_factory, "version", batch_input.provider)
         store = ManagedStore()

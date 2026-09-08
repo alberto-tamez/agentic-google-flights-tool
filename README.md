@@ -50,14 +50,16 @@ skill unless you pass `--force`.
 - Search one-way, round, and multi-city trips, including trips that return from a
   different city or to a different airport.
 - Explore nearby airports, dates, and stay lengths; filter by price, stops, airline,
-  time, duration, and overhead cabin bag.
+  connection, layover, time, duration, emissions, and baggage.
+- Search for adults, children, and infants, including lap infants.
 - Compare price against travel time without mixing different currencies.
 - Check the current total price, same-flight match, baggage rules, and booking links.
 - Say when it could not read a flight, stopped early, or still has work to do.
 
 ## Ways agents can use it
 
-The skill is the easiest way to start. The package also has a Python API, a
+The skill is the easiest way to start. Broad searches use a fast direct request;
+final-price and baggage checks use the browser. The package also has a Python API, a
 command-line interface, and an optional local MCP connection for AI apps:
 
 ```sh
@@ -79,4 +81,5 @@ with the seller. The tool does not book travel.
 
 [Agent guide](docs/agent-guide.md) · [Technical reference](docs/reference.md) ·
 [PyPI](https://pypi.org/project/agentic-flights/) ·
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
+[Third-party notices](THIRD_PARTY_NOTICES.md)

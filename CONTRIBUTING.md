@@ -43,10 +43,13 @@ By contributing, you agree that your contribution will be licensed under the MIT
 Provider code lives in `src/agentic_flights/providers/`:
 
 - `base.py` defines the shared protocol, result, and error types.
-- `browser.py` builds queries and manages browser sessions and page interactions.
+- `direct.py` performs fast broad searches through Google's frontend service.
+- `browser.py` manages browser sessions and final-price verification.
 - `parsing.py` reads flight labels, booking totals, and baggage evidence.
 - `traversal.py` tracks flight choices, work budgets, and resumable searches.
-- `fli.py` adapts the optional `flights` library.
+
+`google_query.py` contains the internal Google Flights URL encoder used by the
+browser provider.
 
 `provider.py` keeps existing imports working. Provider implementations import each
 other directly, without going through this compatibility module.

@@ -113,8 +113,8 @@ SearchSpec's `retrieval_limit`, `load_more_clicks`, `candidates_per_stage`,
 unset. Finite values schedule resumable work. Returned `coverage.continuation`
 retains unfinished branches and quote evidence. Feed it back with the same query
 when using BatchExecutor directly; AgentAPI/Exploration do this for you.
-`max_results` is a legacy option used by the optional fli provider; the browser
-preserves all explored quotes and lets saved-result views paginate them.
+`max_results` is retained for input compatibility; saved-result views paginate the
+quotes that were explored.
 
 Replay checks observed flight labels. Inventory changes can produce `branch_changed`,
 which is retained for explicit continuation. Persistent failures need changed input
@@ -170,14 +170,15 @@ and 100 MB across managed reports/provider cache. These storage policies are
 configurable with `ManagedStore(policy=StorePolicy(...))`. Export persistent results
 before expiration. Missing/expired handles return errors, not invented results.
 
-The default browser provider uses installed Chrome or Playwright Chromium. It reads
-English Google Flights labels. Browsers are reused within a batch; each query gets
+Browser verification uses installed Chrome or Playwright Chromium. It reads English
+Google Flights labels. Browsers are reused within a batch; each query gets
 an isolated context. Transient DOM replacement/navigation gets a recovery attempt;
 repeated failures return explicit errors or continuations. Page operation timeouts
 bound a hung I/O operation, not total search scope.
 
-Install the `fli` extra for the optional undocumented-endpoint provider. It is not
-the tested default and does not implement the browser's complete-ticket traversal.
+The default smart provider uses direct Google requests for broad discovery and the
+browser for final-price and baggage verification. `direct` and `browser` remain
+available when a caller needs to select one explicitly.
 Development setup: `uv sync --extra dev --extra mcp`; run `uv run pytest` and
 `uv run ruff check .`. Repository examples use concrete dates; refresh them with
 `uv run python scripts/refresh_example_dates.py` before using them.

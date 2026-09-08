@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0
+
+- Replaced the required fast-flights package with an attributed internal Google
+  Flights query encoder.
+- Replaced the optional Fli adapter with an attributed native direct-search provider.
+- Added a smart provider that uses direct requests for discovery and browser traversal
+  for current total-price and baggage verification.
+- Added children, infants, checked bags, airline exclusions, connection airports,
+  layover windows, lower-emissions filtering, self-transfer hiding, and basic-economy
+  exclusion to search inputs.
+
 ## 0.5.0
 
 - Made `agentic-flights` the standalone distribution, with no dependency on the

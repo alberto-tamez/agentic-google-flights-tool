@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from agentic_flights.models import SCHEMA_VERSION, FlightOption, SearchCoverage, SearchSpec
 
-DEFAULT_NAMESPACE = "fli-0.10.0"
+DEFAULT_NAMESPACE = "agentic-flights-v7"
 
 
 class CacheRecord(BaseModel):

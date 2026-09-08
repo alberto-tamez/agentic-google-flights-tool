@@ -16,7 +16,7 @@ from agentic_flights.models import (
     SearchOutcome,
     SearchSpec,
 )
-from agentic_flights.provider import BrowserProvider, Provider, ProviderError
+from agentic_flights.provider import Provider, ProviderError, SmartProvider
 
 ProviderFactory = Callable[[], Provider]
 
@@ -28,7 +28,7 @@ class BatchExecutor:
         *,
         max_workers: int = 2,
         ranking_limit: int = 10,
-        provider_factory: ProviderFactory = BrowserProvider,
+        provider_factory: ProviderFactory = SmartProvider,
     ) -> None:
         if isinstance(max_workers, bool) or not isinstance(max_workers, int) or max_workers < 1:
             raise ValueError("max_workers must be a positive integer")

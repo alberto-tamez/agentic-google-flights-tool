@@ -5,7 +5,6 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from fast_flights import FlightQuery, Passengers, create_query
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -13,6 +12,7 @@ from agentic_flights import AgentAPI, BatchExecutor, SearchSpace
 from agentic_flights.cache import FileCache
 from agentic_flights.cli import run
 from agentic_flights.filtering import ShortlistSpec, collect_matches
+from agentic_flights.google_query import FlightQuery, Passengers, create_query
 from agentic_flights.mcp_server import _handler
 from agentic_flights.models import (
     BaggageAllowance,
@@ -56,6 +56,18 @@ def routes(draw):
     origin = draw(st.sampled_from(AIRPORTS))
     destination = draw(st.sampled_from([code for code in AIRPORTS if code != origin]))
     return origin, destination
+
+
+@st.composite
+def passenger_groups(draw):
+    adults = draw(st.integers(1, 9))
+    remaining = 9 - adults
+    children = draw(st.integers(0, remaining))
+    remaining -= children
+    infants_in_seat = draw(st.integers(0, remaining))
+    remaining -= infants_in_seat
+    infants_on_lap = draw(st.integers(0, min(adults, remaining)))
+    return adults, children, infants_in_seat, infants_on_lap
 
 
 def specs(*, route=None, departure=None, **updates) -> SearchSpec:
@@ -123,17 +135,23 @@ def test_trip_space_visits_every_requested_choice_once(
     route=routes(),
     departure=st.dates(min_value=date(2027, 1, 1), max_value=date(2029, 12, 1)),
     stay=st.integers(0, 30),
-    adults=st.integers(1, 9),
+    passengers=passenger_groups(),
     cabin=st.sampled_from(("economy", "premium_economy", "business", "first")),
     stops=st.sampled_from(("any", "non_stop", "one_stop_or_fewer", "two_or_fewer")),
     currency=st.sampled_from(CURRENCIES),
 )
-def test_google_query_preserves_trip_intent(route, departure, stay, adults, cabin, stops, currency):
+def test_google_query_preserves_trip_intent(
+    route, departure, stay, passengers, cabin, stops, currency
+):
+    adults, children, infants_in_seat, infants_on_lap = passengers
     spec = specs(
         route=route,
         departure=departure,
         return_date=departure + timedelta(days=stay),
         adults=adults,
+        children=children,
+        infants_in_seat=infants_in_seat,
+        infants_on_lap=infants_on_lap,
         cabin=cabin,
         max_stops=stops,
         currency=currency,
@@ -142,7 +160,12 @@ def test_google_query_preserves_trip_intent(route, departure, stay, adults, cabi
     outbound, returning = query.flight_data
     assert (outbound.from_airport.airport, outbound.to_airport.airport) == route
     assert (returning.from_airport.airport, returning.to_airport.airport) == route[::-1]
-    assert query.passengers == [1] * adults
+    assert query.passengers == [
+        *([1] * adults),
+        *([2] * children),
+        *([3] * infants_in_seat),
+        *([4] * infants_on_lap),
+    ]
     assert query.currency == currency
     assert query.seat == {
         "economy": 1,
@@ -151,7 +174,7 @@ def test_google_query_preserves_trip_intent(route, departure, stay, adults, cabi
         "first": 4,
     }[cabin]
     expected_stops = {
-        "any": 0,
+        "any": None,
         "non_stop": 0,
         "one_stop_or_fewer": 1,
         "two_or_fewer": 2,

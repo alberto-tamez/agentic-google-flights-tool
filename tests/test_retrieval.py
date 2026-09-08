@@ -4,8 +4,8 @@ import asyncio
 from datetime import UTC, date, datetime
 
 from conftest import make_spec
-from fast_flights import FlightQuery, Passengers, create_query
 
+from agentic_flights.google_query import FlightQuery, Passengers, create_query
 from agentic_flights.models import SearchCoverage
 from agentic_flights.provider import (
     _build_browser_query,

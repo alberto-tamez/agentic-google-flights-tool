@@ -103,8 +103,9 @@ class BrowserProvider:
             self._browser = self._playwright = None
 
     async def _search(self, spec: SearchSpec) -> ProviderResult:
-        from fast_flights import FlightQuery, Passengers, create_query
         from playwright.async_api import async_playwright
+
+        from agentic_flights.google_query import FlightQuery, Passengers, create_query
 
         query, segments = _build_browser_query(spec, FlightQuery, Passengers, create_query)
         kind = (
@@ -155,6 +156,10 @@ def _build_browser_query(
             earliest_arrival_hour=segment.filters.earliest_arrival_hour,
             latest_arrival_hour=segment.filters.latest_arrival_hour,
             max_duration_minutes=segment.filters.max_duration_minutes,
+            connecting_airports=segment.filters.connecting_airports or None,
+            min_layover_minutes=segment.filters.min_layover_minutes,
+            max_layover_minutes=segment.filters.max_layover_minutes,
+            less_emissions_only=segment.filters.less_emissions_only,
         )
         for segment in requested_segments
     ]
@@ -169,11 +174,19 @@ def _build_browser_query(
         flights=flights,
         trip=trip,
         seat=spec.cabin.value.replace("_", "-"),
-        passengers=passengers(adults=spec.adults),
+        passengers=passengers(
+            adults=spec.adults,
+            children=spec.children,
+            infants_in_seat=spec.infants_in_seat,
+            infants_on_lap=spec.infants_on_lap,
+        ),
         currency=spec.currency,
         language="en",
         carry_on_bags=spec.overhead_cabin_bags,
+        checked_bags=spec.checked_bags,
         max_price=spec.max_price,
+        hide_separate_and_self_transfer=spec.hide_separate_and_self_transfer,
+        exclude_basic_economy=spec.exclude_basic_economy,
     )
     return query, requested_segments
 

@@ -19,13 +19,7 @@ from agentic_flights.providers.browser import (
     _search_discovery_browser,
     _select_label,
 )
-from agentic_flights.providers.fli import (
-    FliProvider,
-    _CapturingClient,
-    _enum_code,
-    _has_wrb_payload,
-    _normalize_option,
-)
+from agentic_flights.providers.direct import DirectProvider, SmartProvider, _has_wrb_payload
 from agentic_flights.providers.parsing import (
     _RESULT_RE,
     _baggage_meets_requirement,
@@ -59,6 +53,8 @@ __all__ = [
     "ProviderResult",
     "_RESULT_SELECTOR",
     "BrowserProvider",
+    "DirectProvider",
+    "SmartProvider",
     "_build_browser_query",
     "_explore_complete_tickets",
     "_load_source_labels",
@@ -67,11 +63,7 @@ __all__ = [
     "_result_labels",
     "_search_discovery_browser",
     "_select_label",
-    "FliProvider",
-    "_CapturingClient",
-    "_enum_code",
     "_has_wrb_payload",
-    "_normalize_option",
     "_RESULT_RE",
     "_baggage_meets_requirement",
     "_choice_identity",
