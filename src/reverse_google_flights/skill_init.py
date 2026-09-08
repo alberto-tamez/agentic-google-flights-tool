@@ -25,6 +25,10 @@ def skill_destinations(
     user_home: Path | None = None,
 ) -> dict[str, Path]:
     """Return the documented skill location for each requested harness."""
+    if harness not in {"codex", "claude", "both"}:
+        raise ValueError("harness must be codex, claude, or both")
+    if scope not in {"project", "user"}:
+        raise ValueError("scope must be project or user")
     selected = ("codex", "claude") if harness == "both" else (harness,)
     if scope == "project":
         base = (project_dir or Path.cwd()).expanduser().resolve()
@@ -50,33 +54,52 @@ def install_skill(
         source = Path(__file__).resolve().parents[2] / "skill" / "agentic-flights"
     with as_file(source.joinpath("SKILL.md")) as skill_file:
         source_path = skill_file.parent
+        statuses = {
+            name: _status(source_path, destination) for name, destination in destinations.items()
+        }
+        conflicts = [
+            str(destinations[name]) for name, status in statuses.items() if status == "conflict"
+        ]
+        if conflicts and not force and not dry_run:
+            raise FileExistsError(
+                "Skills already exist with different content: "
+                + ", ".join(conflicts)
+                + ". Use --force to replace them."
+            )
         actions: list[dict[str, str]] = []
         for name, destination in destinations.items():
-            status = _status(source_path, destination)
-            if status == "conflict" and not force:
-                raise FileExistsError(
-                    f"Skill already exists with different content: {destination}. "
-                    "Use --force to replace it."
-                )
+            status = statuses[name]
             action = (
                 "unchanged"
                 if status == "identical"
+                else "conflict"
+                if status == "conflict" and not force
                 else "replace"
                 if status == "conflict"
                 else "install"
             )
-            if not dry_run and action != "unchanged":
+            if not dry_run and action in {"install", "replace"}:
                 _copy_skill(source_path, destination, replace=action == "replace")
             actions.append({"harness": name, "path": str(destination), "action": action})
     invocations = {"codex": "$agentic-flights", "claude": "/agentic-flights"}
+    activation = {
+        "codex": "Codex detects skill changes automatically; restart Codex if it does not appear.",
+        "claude": (
+            "Claude Code detects changes inside an existing skills directory. Restart Claude Code "
+            "if this command created the top-level .claude/skills directory during the session."
+        ),
+    }
     return {
         "scope": scope,
         "dry_run": dry_run,
-        "skills": [{**item, "invoke": invocations[item["harness"]]} for item in actions],
-        "restart_note": (
-            "Codex or Claude Code normally detects skill changes. Restart the harness "
-            "if agentic-flights does not appear."
-        ),
+        "skills": [
+            {
+                **item,
+                "invoke": invocations[item["harness"]],
+                "activation": activation[item["harness"]],
+            }
+            for item in actions
+        ],
     }
 
 

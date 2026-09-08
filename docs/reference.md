@@ -20,6 +20,14 @@ folders under the home directory. Run with `--dry-run` to inspect destinations.
 The command is idempotent. It refuses to overwrite a different existing skill unless
 `--force` is explicit.
 
+The bundled skill uses only the cross-harness fields accepted by both current
+validators: `name`, `description`, and `license`. Claude Code invokes it as `/agentic-flights`; Codex
+uses `$agentic-flights`. Both harnesses can also select it automatically from its
+description. Claude Code watches an existing skills directory for changes, but needs
+a restart when `.claude/skills` is first created during an active session. Claude
+Agent SDK callers must enable the `project` or `user` setting source containing the
+installed skill.
+
 ## Complete Python workflow
 
 ```python

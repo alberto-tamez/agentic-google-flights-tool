@@ -15,6 +15,8 @@ def test_project_skill_installs_for_both_harnesses(tmp_path: Path) -> None:
     for destination in installed.values():
         text = (destination / "SKILL.md").read_text()
         assert "name: agentic-flights" in text
+        assert "license: MIT" in text
+        assert "Python 3.11+" in text
         assert "AgentAPI.plan()" in text
 
     repeated = install_skill(project_dir=tmp_path)
@@ -34,6 +36,19 @@ def test_existing_custom_skill_requires_force(tmp_path: Path) -> None:
     assert (destination / "SKILL.md").read_text().startswith("---\n")
 
 
+def test_multi_harness_conflict_is_checked_before_any_write(tmp_path: Path) -> None:
+    claude = tmp_path / ".claude/skills/agentic-flights"
+    claude.mkdir(parents=True)
+    (claude / "SKILL.md").write_text("custom\n")
+
+    preview = install_skill(project_dir=tmp_path, dry_run=True)
+    assert [item["action"] for item in preview["skills"]] == ["install", "conflict"]
+
+    with pytest.raises(FileExistsError, match="--force"):
+        install_skill(project_dir=tmp_path)
+    assert not (tmp_path / ".agents").exists()
+
+
 def test_dry_run_and_user_destinations_do_not_write(tmp_path: Path) -> None:
     destinations = skill_destinations("both", "user", user_home=tmp_path)
     assert destinations["codex"] == tmp_path / ".agents/skills/agentic-flights"
@@ -48,4 +63,5 @@ def test_cli_outputs_install_manifest(tmp_path: Path, capsys) -> None:
     assert run(["init-skill", "--harness", "codex", "--project-dir", str(tmp_path)]) == 0
     output = capsys.readouterr().out
     assert '"invoke": "$agentic-flights"' in output
+    assert "detects skill changes automatically" in output
     assert (tmp_path / ".agents/skills/agentic-flights/SKILL.md").is_file()

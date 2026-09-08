@@ -2,6 +2,14 @@
 
 This project uses semantic versioning once releases begin.
 
+## 0.4.1
+
+- Matched the frontmatter accepted by Codex and Claude Code and documented Claude's
+  live-reload and Agent SDK behavior.
+- Preflighted multi-harness skill installs so conflicts cannot leave a partial setup.
+- Reworked the README around the AI handoff, user-visible capabilities, interfaces,
+  requirements, local storage, and reliability limits.
+
 ## 0.4.0
 
 - Added `agentic-flights init-skill` to install one bundled Agent Skill for Codex,

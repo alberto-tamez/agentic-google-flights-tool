@@ -1,180 +1,87 @@
 # Agentic Flights
 
-Agentic Flights gives AI agents a command-line tool and Python API for searching Google Flights. It can compare exact itineraries or explore combinations of airports, dates, and trip lengths without dumping every raw result into the conversation.
+Give an AI agent a trip goal and let it search Google Flights across airports,
+dates, and trip lengths, compare the useful tradeoffs, and verify the finalists.
 
-It supports one-way, round-trip, and multi-city searches, plus filters for price, stops, airlines, times, duration, and overhead cabin baggage.
+## Give this to your AI
 
-> [!IMPORTANT]
-> This is an unofficial project and is not affiliated with Google. Google can change its pages without notice, and fares can change between a search and checkout. Confirm the final price, baggage rules, and availability with the seller.
+Copy this prompt into Codex or Claude Code and replace the trip details:
 
-## Install
+```text
+Install Agentic Flights with:
+`python -m pip install -U agentic-google-flights-tool`
 
-Agentic Flights requires Python 3.11 or newer.
+Install its reusable skill for the harness you are running:
+- Codex: `agentic-flights init-skill --scope user --harness codex`
+- Claude Code: `agentic-flights init-skill --scope user --harness claude`
 
-```sh
-python -m pip install agentic-google-flights-tool
+Invoke the installed Agentic Flights skill and use it to find the best flights
+for my trip. Explore flexible dates, nearby airports, and trip lengths when they
+could improve the result. Compare meaningful price and travel-time tradeoffs,
+verify the current complete price and baggage evidence for the finalists, and
+tell me where search coverage remains incomplete. Do not book anything.
+
+Trip: [origin, destination, dates or flexibility, trip length, travelers,
+currency, baggage, stop limits, and timing or airline preferences].
 ```
 
-The browser search uses Google Chrome if it is installed. Otherwise, install Playwright's Chromium build:
+## Install it yourself
+
+Agentic Flights requires Python 3.11 or newer and uses an installed Google Chrome.
+If Chrome is unavailable, install Playwright Chromium after the package:
 
 ```sh
+python -m pip install -U agentic-google-flights-tool
 python -m playwright install chromium
 ```
 
-Check the installation and print the bundled agent instructions:
-
-```sh
-agentic-flights guide
-```
-
-Install the reusable skill into the current project for both Codex and Claude Code:
+Install the skill in the current project for both Codex and Claude Code:
 
 ```sh
 agentic-flights init-skill
 ```
 
-This creates `.agents/skills/agentic-flights/SKILL.md` for Codex and
-`.claude/skills/agentic-flights/SKILL.md` for Claude Code. Install it for every
-project instead with `agentic-flights init-skill --scope user`. Existing customized
-skills are left untouched unless you pass `--force`.
+This writes `.agents/skills/agentic-flights/SKILL.md` for Codex and
+`.claude/skills/agentic-flights/SKILL.md` for Claude Code. Add `--scope user` to
+make it available in every project. The initializer preserves an existing modified
+skill unless `--force` is explicit.
 
-## Give it to an AI agent
+## What it can do
 
-Paste the following into an agent that can run terminal commands, then replace the bracketed text with your trip:
+- Search one-way, round-trip, open-jaw, and multi-city itineraries.
+- Explore combinations of origin airports, destinations, dates, and stay lengths.
+- Filter by price, stops, airlines, local times, duration, and cabin baggage.
+- Save full results behind compact `rgf_...` run IDs and resume unfinished work.
+- Compare currencies safely and retain useful price, duration, and stop tradeoffs.
+- Verify final whole-ticket prices, itinerary matches, booking links, and baggage
+  evidence without continuing to purchase.
+- Report parsing losses, truncated searches, retryable failures, and unexplored work.
 
-```text
-Install Agentic Flights with `python -m pip install agentic-google-flights-tool`.
-Run `agentic-flights guide` and follow those instructions to search for my trip.
+## Ways agents can use it
 
-Trip: [origin, destination, dates or flexibility, number of travelers, currency,
-and preferences such as stops, baggage, price, or departure times].
-```
+The installed skill is the easiest entry point. `agentic-flights guide` prints the
+workflow, and `agentic-flights guide <operation>` reveals one schema at a time.
 
-For example:
-
-```text
-Find flights from Madrid or Barcelona to Tokyo or Osaka for 12 to 15 nights in
-October 2027. One adult, economy, at most one stop, and one overhead cabin bag.
-Compare price and total travel time. Show me the best three tradeoffs and verify
-the final price and baggage allowance before recommending one.
-```
-
-The installed package includes both the short workflow and the full technical reference:
+The package also includes the code-first `AgentAPI`, a JSON CLI for exact batches,
+and an optional local MCP server:
 
 ```sh
-agentic-flights guide
-agentic-flights guide reference
-agentic-flights guide schema
-```
-
-No repository checkout is needed.
-
-## Run a search yourself
-
-The CLI accepts a JSON file or JSON from standard input. This example runs one discovery search and saves the full report in the managed local cache:
-
-```sh
-agentic-flights - <<'JSON'
-{
-  "provider": "browser",
-  "max_workers": 1,
-  "searches": [
-    {
-      "request_id": "mad-lis",
-      "origin": "MAD",
-      "destination": "LIS",
-      "departure_date": "2027-01-21",
-      "return_date": "2027-01-28",
-      "cabin": "economy",
-      "max_stops": "non_stop",
-      "adults": 1,
-      "currency": "EUR",
-      "language": "en-US",
-      "country": "ES",
-      "search_mode": "discover",
-      "max_results": 5
-    }
-  ]
-}
-JSON
-```
-
-The command prints a compact summary with a run ID such as `rgf_...`. Use that ID to inspect the saved report without searching Google again:
-
-```sh
-agentic-flights summary RUN_ID
-agentic-flights list RUN_ID --page-size 5
-agentic-flights show RUN_ID RESULT_ID
-```
-
-To keep the complete JSON report at a path you choose, add `--output flights.json`. Use `--full` only when you explicitly want the entire report on standard output.
-
-## Discovery and verification
-
-`search_mode: "discover"` reads a broad set of candidates with less browser work. Use it to compare routes and dates.
-
-`search_mode: "verify"` follows selected flight combinations to Google's final itinerary page. Use it for shortlisted round trips or multi-city trips that need a complete ticket price or baggage evidence. Discovery prices for multi-leg trips can be provisional, so do not add one-way prices together and call the result a verified fare.
-
-## Use the Python API
-
-The distribution keeps the import name `reverse_google_flights` for compatibility:
-
-```python
-from reverse_google_flights import BatchExecutor, SearchSpec
-from reverse_google_flights.cache import FileCache
-from reverse_google_flights.provider import BrowserProvider
-from reverse_google_flights.store import ManagedStore
-
-store = ManagedStore()
-store.initialize()
-
-executor = BatchExecutor(
-    FileCache(store.provider_cache / "browser", namespace=BrowserProvider.version),
-    max_workers=1,
-)
-
-report = executor.execute(
-    [
-        SearchSpec(
-            request_id="mad-lis",
-            origin="MAD",
-            destination="LIS",
-            departure_date="2027-01-21",
-            return_date="2027-01-28",
-            currency="EUR",
-            language="en-US",
-            country="ES",
-            search_mode="discover",
-        )
-    ]
-)
-
-print(report.model_dump_json(indent=2))
-```
-
-For flexible-date exploration, multi-city inputs, filtering, retrieval limits, cache behavior, and complete-ticket verification, read the [technical reference](docs/reference.md).
-
-## Connect through MCP
-
-```sh
-python -m pip install "agentic-google-flights-tool[mcp]"
+python -m pip install -U "agentic-google-flights-tool[mcp]"
 agentic-flights-mcp
 ```
 
-Use stdio, or add `--transport streamable-http` for local HTTP. The adapter exposes
-planning, resumable exploration, comparison, inspection, and verification through
-saved run IDs. Agents can load input schemas on demand with `schema`.
+MCP supports stdio and local stateless HTTP. Saved runs live in the local managed
+store; the project does not operate a hosted flight-search service. Managed runs
+expire after seven idle days by default, so export anything that must be retained.
 
-## Limits and responsible use
+## Know before relying on a result
 
-Google Flights does not publish a consumer search API. This project depends on undocumented page behavior and may need updates when Google changes it. Search results are dated observations, not reservations or price guarantees.
+This is an unofficial project and is not affiliated with Google. Google Flights has
+no supported consumer search API, so page changes can break retrieval. Results are
+dated observations rather than reservations or price guarantees. Search coverage is
+reported but cannot prove that Google exposed every available fare. Confirm price,
+baggage, and availability with the seller. The tool does not book travel.
 
-Keep browser concurrency low. Do not use this project to bypass access controls, overload services, or automate purchases. You are responsible for following the terms, policies, and laws that apply to your use.
-
-## Project links
-
-- [Agent guide](docs/agent-guide.md)
-- [Technical reference](docs/reference.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
-- [PyPI](https://pypi.org/project/agentic-google-flights-tool/)
+[Agent guide](docs/agent-guide.md) · [Technical reference](docs/reference.md) ·
+[PyPI](https://pypi.org/project/agentic-google-flights-tool/) ·
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)

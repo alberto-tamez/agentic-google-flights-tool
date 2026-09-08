@@ -1,12 +1,14 @@
 ---
 name: agentic-flights
 description: Search and compare Google Flights for exact or flexible trips, including nearby airports, date ranges, trip lengths, final-price verification, and baggage evidence. Use when the user wants flight options or trip planning. Do not use to book or purchase travel.
+license: MIT
 ---
 
 # Agentic Flights
 
 Use the installed `agentic-flights` command and `reverse_google_flights.AgentAPI`.
 Keep full search reports behind their `rgf_...` run IDs; return compact comparisons.
+The tool requires Python 3.11+ and Google Chrome or Playwright Chromium.
 
 ## Find flights
 
