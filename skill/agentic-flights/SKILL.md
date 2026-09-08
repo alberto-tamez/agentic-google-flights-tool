@@ -1,6 +1,6 @@
 ---
 name: agentic-flights
-description: Search and compare Google Flights for exact or flexible trips, including nearby airports, date ranges, trip lengths, final-price verification, and baggage evidence. Use when the user wants flight options or trip planning. Do not use to book or purchase travel.
+description: Find and compare Google Flights for exact or flexible trips, including nearby airports, date ranges, trip lengths, current total prices, and baggage rules. Use when the user wants flight options or help planning a trip. Do not use to book or buy travel.
 license: MIT
 ---
 
@@ -19,10 +19,10 @@ The tool requires Python 3.11+ and Google Chrome or Playwright Chromium.
    Continue while `progress.can_continue` unless the user supplied a real budget
    or the observed options already satisfy their stated goal. A work chunk controls
    one call's latency; it is not a total-search limit.
-3. Use `compare()` with an explicit currency and `alternatives()` for meaningful
-   price, duration, and stop tradeoffs. Inspect only promising result IDs.
-4. Use `verify()` for current complete-ticket prices or baggage evidence. Inspect
-   `matching_result_ids`; do not treat other fresh quotes as the selected flight.
+3. Use `compare()` with an explicit currency. Use `alternatives()` to find choices
+   that balance price, travel time, and stops. Inspect only promising result IDs.
+4. Use `verify()` to check the current total trip price or baggage rules. Inspect
+   `matching_result_ids`; do not present different fresh flights as the selected one.
 5. Report prices, dates, airports, duration, stops, baggage evidence, freshness,
    and incomplete coverage. Do not claim a global minimum or book the ticket.
 

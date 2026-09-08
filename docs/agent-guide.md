@@ -10,15 +10,15 @@ Chrome or run `python -m playwright install chromium`. Read `agentic-flights gui
 `search`, or `filters` for only the schema you need; `operations` lists the API. For operation inputs, use `agentic-flights guide verify`
 or the corresponding operation name; class introspection is unnecessary.
 
-For durable harness discovery, run `agentic-flights init-skill` in a project. It
+To make the skill available to an AI app, run `agentic-flights init-skill` in a project. It
 installs this workflow for both Codex and Claude Code. Use `--scope user` for every
 project, or `--harness codex` / `--harness claude` to install only one copy.
 
 ## Plan and explore
 
 Resolve cities to explicit airport choices and relative dates to concrete dates.
-Record travelers, currency, stop/timing requirements, baggage, and the user's
-price-versus-time preferences. Clarify missing information that changes the trip.
+Record travelers, currency, stop and time requirements, baggage, and how the user
+balances price against travel time. Clarify missing information that changes the trip.
 
 Use `AgentAPI.plan` to validate and save a `SearchSpace` without making flight
 requests. `AgentAPI.explore` accepts the saved run ID and returns a new snapshot.
@@ -42,18 +42,18 @@ load timeouts can still interrupt the work.
 
 ## Compare, inspect, verify
 
-Use `compare` with filters to rank saved results offline. Select a currency before
-price comparisons in a mixed-currency dataset. `alternatives` returns observed
-price/duration/stops tradeoffs rather than assuming that cheapest means best.
+Use `compare` with filters to rank saved results without searching again. Select a
+currency before comparing prices from different currencies. `alternatives` returns
+choices that balance price, travel time, and stops instead of assuming cheapest is best.
 `inspect` expands only selected result IDs, including their original query and
 requested return date. Keep full reports outside the conversation.
 
-Discovery multi-leg prices are provisional. Call `verify` on selected result IDs
-for current final prices and baggage. It reports whether the observed itinerary
-matched; it must not silently substitute another flight. An outbound-only match
-proves only the selected outbound, not a specific return choice. Matching uses the
-route, local times, airline and flight number where known, not a provider booking ID.
-Inspect `matching_result_ids` to retrieve the exact matching quotes.
+Early prices for trips with more than one flight are not confirmed totals. Call
+`verify` on selected result IDs for current total prices and baggage. It reports
+whether it found the same flights; it must not silently substitute another flight.
+A match for the departure flight confirms only that flight, not a specific return.
+Matching uses the route, local times, airline, and flight number where known, not a
+booking-system ID. Inspect `matching_result_ids` to retrieve the exact verified results.
 If a match is pending, continue its saved run. If it is absent, report that clearly.
 
 Never sum independent one-way fares and label them a complete ticket. A complete
@@ -71,7 +71,8 @@ return `ok=false` with field-level validation and a suggested repair action.
 ## Return a decision
 
 Present a concise comparison with total price/currency, dates, airports, duration,
-stops, baggage evidence, and booking links when available. Explain tradeoffs.
+stops, baggage evidence, and booking links when available. Explain why each option
+may suit the user.
 State remaining queries/branches, errors, parse losses and observation freshness.
 No tool can prove Google's entire inventory was exposed. Do not book tickets.
 

@@ -2,6 +2,12 @@
 
 This project uses semantic versioning once releases begin.
 
+## 0.4.2
+
+- Replaced travel and agent jargon in the README, installed skill, and agent guide
+  with direct descriptions of what the tool does.
+- Explained trips that return from another city or airport in plain language.
+
 ## 0.4.1
 
 - Matched the frontmatter accepted by Codex and Claude Code and documented Claude's
