@@ -30,6 +30,7 @@ dependencies = [
 mcp = ["mcp>=2,<3"]
 fli = ["flights==0.9.0"]
 dev = [
+    "hypothesis>=6.112,<7",
     "pytest>=8.3,<9",
     "ruff>=0.8",
 ]
@@ -51,7 +52,10 @@ packages = ["src/reverse_google_flights"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
-markers = ["live: calls the live reverse-engineered Google Flights endpoint"]
+markers = [
+    "feature(name): maps a test to a user-facing capability",
+    "live: calls the live reverse-engineered Google Flights endpoint",
+]
 
 [tool.ruff]
 target-version = "py311"

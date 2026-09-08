@@ -1,10 +1,13 @@
 .venv/
 .pytest_cache/
+.hypothesis/
 .ruff_cache/
 **/__pycache__/
 artifacts/
 # Local agent evaluations: benchmark scripts, raw results, and reports.
 /artifacts/agent-eval/
+# Local randomized feature contracts, run histories, seeds, and latency reports.
+/artifacts/tdd/
 .coverage
 .DS_Store
 build/
