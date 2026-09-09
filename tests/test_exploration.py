@@ -181,6 +181,35 @@ def test_whole_itinerary_preference_prioritizes_the_selected_return() -> None:
     assert selected == [[outbound, matching_return]]
 
 
+def test_empty_onward_choices_are_retained_as_a_retryable_branch_error() -> None:
+    spec = make_spec(
+        "empty-branch",
+        date(2027, 1, 15),
+        destination="LIS",
+        return_date=date(2027, 1, 22),
+        max_complete_quotes=1,
+    )
+
+    async def discover(prefix):
+        return ["outbound"] if not prefix else []
+
+    async def finalize(prefix):
+        raise AssertionError("an incomplete branch cannot be finalized")
+
+    coverage = SearchCoverage()
+    options = asyncio.run(
+        _run_bounded_exploration(spec, 2, coverage, discover, finalize)
+    )
+
+    assert options == []
+    assert coverage.blocked is True
+    assert coverage.pending_branches == 1
+    assert coverage.branch_errors_by_code == {"branch_empty": 1}
+    assert coverage.branch_error_samples[0].retryable is True
+    with pytest.raises(ProviderError, match="validated complete ticket quote"):
+        _complete_result(options, coverage)
+
+
 def test_partial_errors_duplicates_and_later_baggage_match_are_preserved() -> None:
     spec = _strict_bag_spec(max_complete_quotes=4)
     coverage = SearchCoverage()

@@ -116,6 +116,12 @@ async def _run_bounded_exploration(
                     options.append(option)
             else:
                 labels = await discover(prefix)
+                if not labels:
+                    raise ProviderError(
+                        "branch_empty",
+                        "The selected flight produced no onward choices.",
+                        retryable=True,
+                    )
                 failed_paths.discard(json.dumps(prefix))
                 coverage.candidates_seen += len(labels)
                 key = json.dumps(prefix)

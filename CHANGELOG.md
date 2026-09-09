@@ -14,6 +14,8 @@
   incomplete coverage where the nested query error is null.
 - Report saved continuation and exhausted work budgets as explicit issues instead of
   returning an empty issue list for unfinished work.
+- Preserve a selected flight that yields no onward choices as a retryable branch error
+  instead of silently discarding it.
 - Keep run IDs, result IDs, continuation state, branch counts, and provider diagnostics
   out of user-facing progress and recommendations unless the user requests them.
 - Require the bundled agent skill to check for a compatible installed runtime before
