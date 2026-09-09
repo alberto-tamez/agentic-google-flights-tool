@@ -5,6 +5,7 @@ import hashlib
 import json
 import sys
 from collections.abc import Sequence
+from importlib.metadata import version
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agentic_flights.batch import BatchExecutor
+from agentic_flights.batch_session import BatchSession
 from agentic_flights.cache import FileCache
 from agentic_flights.filtering import ShortlistSpec
 from agentic_flights.models import SearchSpec
@@ -28,6 +30,9 @@ class BatchInput(BaseModel):
     cache_ttl_seconds: int = Field(default=3600, ge=0)
     ranking_limit: int = Field(default=10, ge=1)
     provider: str = "smart"
+    work_chunk: int = Field(default=8, ge=1)
+    chunk_seconds: float = Field(default=20, gt=0, allow_inf_nan=False)
+    query_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
 
 
 def run(
@@ -36,6 +41,9 @@ def run(
     provider_factory: Any = None,
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
+    resume = bool(arguments and arguments[0] == "resume")
+    if resume:
+        arguments = arguments[1:]
     if arguments and arguments[0] == "init-skill":
         return _run_init_skill(arguments[1:])
     if arguments and arguments[0] == "guide":
@@ -49,13 +57,16 @@ def run(
     if arguments and arguments[0] == "show":
         return _run_show(arguments[1:])
     parser = argparse.ArgumentParser(
-        prog="agentic-flights",
+        prog="agentic-flights resume" if resume else "agentic-flights",
         description="Search Google Flights in bounded batches.",
         epilog=(
             "Start with: agentic-flights guide. Install an agent skill with init-skill. "
-            "Other commands: filter, summary, list, show. "
+            "Other commands: resume, filter, summary, list, show. "
             "Run agentic-flights COMMAND --help for details."
         ),
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {version('agentic-flights')}"
     )
     parser.add_argument("input", nargs="?", default="-", help="JSON file, or - for stdin")
     parser.add_argument(
@@ -65,14 +76,32 @@ def run(
     )
     parser.add_argument("--output", type=Path, help="save the full JSON report to this file")
     parser.add_argument("--full", action="store_true", help="write the full report to stdout")
+    parser.add_argument("--retry-errors", action="store_true",
+                        help="retry failed queries on resume")
+    parser.add_argument("--work-chunk", type=int, help="maximum new queries in this work chunk")
+    parser.add_argument("--chunk-seconds", type=float, help="stop starting queries after this time")
+    parser.add_argument("--query-timeout-seconds", type=float, help="time limit per provider query")
     args = parser.parse_args(arguments)
     try:
-        text = (
-            sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8")
-        )
-        raw = json.loads(text)
+        store = ManagedStore()
+        previous = None
+        if resume:
+            previous, _ = load_report(store.resolve(args.input)[0])
+            raw = (previous.exploration_state or {}).get("batch_input")
+            if raw is None:
+                raise ValueError("This report has no resumable batch input.")
+        else:
+            text = (
+                sys.stdin.read() if args.input == "-"
+                else Path(args.input).read_text(encoding="utf-8")
+            )
+            raw = json.loads(text)
         if isinstance(raw, list):
             raw = {"searches": raw}
+        raw = {**raw, **{
+            name: value for name in ("work_chunk", "chunk_seconds", "query_timeout_seconds")
+            if (value := getattr(args, name)) is not None
+        }}
         batch_input = BatchInput.model_validate(raw)
         providers = {
             "smart": SmartProvider,
@@ -83,7 +112,6 @@ def run(
             raise ValueError("provider must be 'smart', 'direct', or 'browser'")
         selected_factory = provider_factory or providers[batch_input.provider]
         namespace = getattr(selected_factory, "version", batch_input.provider)
-        store = ManagedStore()
         if args.cache_dir is None:
             store.initialize()
             cache_root = store.provider_cache
@@ -94,12 +122,24 @@ def run(
             ttl_seconds=batch_input.cache_ttl_seconds,
             namespace=namespace,
         )
-        report = BatchExecutor(
+        executor = BatchExecutor(
             cache,
             max_workers=batch_input.max_workers,
             ranking_limit=batch_input.ranking_limit,
             provider_factory=selected_factory,
-        ).execute(batch_input.searches)
+            query_timeout_seconds=batch_input.query_timeout_seconds,
+        )
+        session = BatchSession(
+            executor, store, batch_input.model_dump(mode="json"), previous=previous,
+            output=args.output,
+            progress=lambda event: print(json.dumps(event), file=sys.stderr, flush=True),
+        )
+        interrupted = False
+        try:
+            report = session.execute(retry_errors=args.retry_errors)
+        except KeyboardInterrupt:
+            interrupted = True
+            report = session.report
     except (OSError, json.JSONDecodeError, ValidationError, ValueError) as exc:
         error = {"error": {"code": "invalid_input", "message": str(exc)}}
         print(json.dumps(error), file=sys.stderr)
@@ -109,7 +149,7 @@ def run(
     if args.output:
         artifact = args.output
         artifact.parent.mkdir(parents=True, exist_ok=True)
-        artifact.write_text(report_json, encoding="utf-8")
+        # The session already published this report atomically after each completion.
         reference = str(artifact)
     else:
         run_id, artifact = store.save(report_json)
@@ -119,6 +159,9 @@ def run(
     else:
         checksum = hashlib.sha256(report_json.encode()).hexdigest()
         manifest = compact_summary(report, checksum, artifact, reference=reference)
+        manifest["batch_progress"] = session.status()
+        if session.status()["can_continue"]:
+            manifest["next_actions"]["resume"] = session.status()["resume_command"]
         if run_id:
             manifest["managed_store"] = {
                 "run_id": run_id,
@@ -127,7 +170,7 @@ def run(
                 "max_bytes": 100 * 1024 * 1024,
             }
         print(json.dumps(manifest, indent=2))
-    return 0
+    return 130 if interrupted else 1 if report.counts.error else 0
 
 
 def _run_init_skill(argv: Sequence[str]) -> int:

@@ -1,9 +1,24 @@
+import re
+import tomllib
 from pathlib import Path
 
 import pytest
 
 from agentic_flights.cli import run
 from agentic_flights.skill_init import install_skill, skill_destinations
+
+
+def test_bundled_skill_uses_declared_cli_commands() -> None:
+    project_root = Path(__file__).parents[1]
+    skill_text = (project_root / "skill/agentic-flights/SKILL.md").read_text(encoding="utf-8")
+    project = tomllib.loads((project_root / "pyproject.toml").read_text(encoding="utf-8"))
+    declared_commands = set(project["project"]["scripts"])
+
+    documented_commands = set(re.findall(r"`([a-z][a-z0-9-]+)(?:\s|`)", skill_text))
+    project_commands = {command for command in documented_commands if "flight" in command}
+
+    assert project_commands
+    assert project_commands <= declared_commands
 
 
 def test_project_skill_installs_for_both_harnesses(tmp_path: Path) -> None:

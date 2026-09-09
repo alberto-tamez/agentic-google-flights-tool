@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from base64 import b64encode
 from datetime import UTC, date, datetime
 
 import pytest
 from conftest import make_spec
 
+from agentic_flights.google_query import _bytes, _scalar, _text
 from agentic_flights.models import BaggageStatus
 from agentic_flights.provider import (
     ProviderError,
@@ -16,6 +18,24 @@ from agentic_flights.provider import (
     _parse_complete_round_trip,
     _parse_selected_booking_option,
 )
+from agentic_flights.providers.parsing import _parse_booking_segment_identities
+
+
+def _booking_url(journeys: list[list[tuple[str, str, str, str, str]]]) -> str:
+    payload = _scalar(1, 28) + _scalar(2, 2)
+    for journey in journeys:
+        encoded_journey = _text(2, journey[0][2])
+        for origin, destination, departure, airline, number in journey:
+            encoded_journey += _bytes(
+                4,
+                _text(1, origin)
+                + _text(2, departure)
+                + _text(3, destination)
+                + _text(5, airline)
+                + _text(6, number),
+            )
+        payload += _bytes(3, encoded_journey)
+    return "https://www.google.com/travel/flights/booking?tfs=" + b64encode(payload).decode()
 
 
 def test_null_wrb_envelope_is_not_a_trustworthy_empty() -> None:
@@ -124,6 +144,39 @@ def test_booking_body_produces_complete_round_trip_with_provider_total() -> None
     assert option.booking_provider == "Iberia"
     assert option.fare_name == "Economy Basic"
     assert _baggage_meets_requirement(option.baggage, 2)
+
+
+def test_booking_url_preserves_connection_level_identity() -> None:
+    requested = make_spec(
+        "connected",
+        date(2027, 1, 14),
+        destination="TBS",
+        return_date=date(2027, 1, 17),
+    ).requested_segments()
+    url = _booking_url(
+        [
+            [
+                ("MAD", "WAW", "2027-01-14", "LO", "434"),
+                ("WAW", "TBS", "2027-01-14", "LO", "725"),
+            ],
+            [
+                ("TBS", "WAW", "2027-01-17", "LO", "724"),
+                ("WAW", "MAD", "2027-01-17", "LO", "433"),
+            ],
+        ]
+    )
+
+    segments = _parse_booking_segment_identities(url, requested)
+
+    assert [
+        (segment.journey_index, segment.origin, segment.destination, segment.flight_number)
+        for segment in segments
+    ] == [
+        (0, "MAD", "WAW", "434"),
+        (0, "WAW", "TBS", "725"),
+        (1, "TBS", "WAW", "724"),
+        (1, "WAW", "MAD", "433"),
+    ]
 
 
 def test_booking_body_produces_complete_open_jaw_ticket() -> None:

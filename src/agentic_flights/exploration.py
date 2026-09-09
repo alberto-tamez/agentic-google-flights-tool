@@ -132,6 +132,8 @@ class Exploration:
         search_budget: int = 20,
         prefer: list[str] | None = None,
         retry_errors: bool = False,
+        chunk_seconds: float | None = None,
+        on_progress=None,
     ) -> ExplorationProgress:
         if (
             isinstance(search_budget, bool)
@@ -156,7 +158,9 @@ class Exploration:
             if prefer is None:
                 priorities = state.get("priorities", priorities)
         by_id = {o.request_id: o for o in outcomes}
-        next_index = len(outcomes)
+        next_index = 0
+        while f"{self.identity}:{next_index}" in by_id:
+            next_index += 1
         pending = [
             o
             for o in outcomes
@@ -190,29 +194,41 @@ class Exploration:
                 spec = self.space.search_at(next_index)
                 spec.request_id = f"{self.identity}:{next_index}"
                 next_index += 1
+                while f"{self.identity}:{next_index}" in by_id:
+                    next_index += 1
             selected.append(spec)
-        batch = self.executor.execute(selected)
-        for outcome in batch.outcomes:
-            visits[outcome.request_id] = visits.get(outcome.request_id, 0) + 1
-            if outcome.error:
-                history.append(
-                    {"request_id": outcome.request_id, "error": outcome.error.model_dump()}
-                )
-            old = by_id.get(outcome.request_id)
-            if old:
-                outcome.requests_made += old.requests_made
-            by_id[outcome.request_id] = outcome
-        report = self.executor.summarize(by_id.values())
-        report.exploration_state = {
-            "version": 1,
-            "identity": self.identity,
-            "space": self.space.model_dump(mode="json"),
-            "failure_history": history,
-            "priorities": priorities,
-            "visits": visits,
-        }
-        encoded = report.model_dump_json()
-        run_id, path = self.store.save(encoded)
+        report = None
+        run_id = path = encoded = None
+
+        def checkpoint(partial, event):
+            nonlocal report, run_id, path, encoded
+            merged = dict(by_id)
+            updated_visits, updated_history = dict(visits), list(history)
+            for outcome in partial.outcomes:
+                key = outcome.request_id
+                updated_visits[key] = updated_visits.get(key, 0) + 1
+                if outcome.error:
+                    updated_history.append({"request_id": key, "error": outcome.error.model_dump()})
+                old = by_id.get(key)
+                merged[key] = outcome.model_copy(update={
+                    "requests_made": outcome.requests_made + (old.requests_made if old else 0)
+                })
+            report = self.executor.summarize(merged.values())
+            report.exploration_state = {
+                "version": 1, "identity": self.identity,
+                "space": self.space.model_dump(mode="json"),
+                "failure_history": updated_history, "priorities": priorities,
+                "visits": updated_visits,
+            }
+            encoded = report.model_dump_json()
+            run_id, path = self.store.save(encoded)
+            if on_progress:
+                on_progress({**event, "run_id": run_id, "completed_queries": len(merged),
+                             "total_queries": self.space.count})
+
+        batch = self.executor.execute(
+            selected, on_progress=checkpoint, chunk_seconds=chunk_seconds
+        )
         summary = compact_summary(
             report, hashlib.sha256(encoded.encode()).hexdigest(), path, reference=run_id
         )
@@ -241,6 +257,6 @@ class Exploration:
                 if exhausted
                 else "work_chunk_complete"
             ),
-            failure_events=len(history),
+            failure_events=len(report.exploration_state["failure_history"]),
             summary=summary,
         )

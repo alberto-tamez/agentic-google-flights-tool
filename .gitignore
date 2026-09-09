@@ -5,6 +5,8 @@
 **/__pycache__/
 # Keep legacy local output out of commits; new exports belong outside the checkout.
 artifacts/
+# Local experiments and evaluation reports never belong in releases.
+/experiments/
 .coverage
 .DS_Store
 build/

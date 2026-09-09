@@ -1,9 +1,10 @@
 # Third-party notices
 
-## fast-flights query encoding
+## fast-flights query encoding and HTTP retrieval
 
-Parts of `src/agentic_flights/google_query.py` are derived from the query models and
-Protocol Buffer schema in fast-flights 3.1.0, upstream commit
+Parts of `src/agentic_flights/google_query.py`, `providers/http_page.py`, and the
+time decoder in `providers/direct.py` are derived from the query models,
+Protocol Buffer schema, HTTP fetcher, and JSON parser in fast-flights 3.1.0, upstream commit
 `6cd32a6e129c3ed23d65ddea0b7ef03f6befcd65`.
 
 Source: <https://github.com/AWeirdDev/flights>

@@ -31,6 +31,11 @@ def test_mcp_in_memory_schema_and_plan(tmp_path):
             )
             result = await client.call_tool("plan", {"space": space.model_dump(mode="json")})
             assert "rgf_" in json.dumps(result.structured_content)
+            exact = make_spec("ignored", DAY, search_mode="discover").model_dump(
+                mode="json", exclude={"request_id", "search_mode"}
+            )
+            result = await client.call_tool("start", {"searches": exact})
+            assert result.structured_content["progress"]["remaining_queries"] == 0
 
     asyncio.run(check())
 
@@ -91,11 +96,12 @@ def test_mcp_errors_can_be_repaired_and_schemas_are_discoverable(tmp_path):
             ).structured_content
             assert missing["error"]["code"] == "run_expired"
             schemas = (await c.call_tool("schema", {"topic": "operations"})).structured_content
-            assert "alternatives" in schemas["operations"] and "issues" in schemas["operations"]
+            assert "start" in schemas["operations"] and "issues" in schemas["operations"]
             schema = (await c.call_tool("schema", {"topic": "verify"})).structured_content
             assert "result_ids" in schema["input_schema"]["properties"]
             tools = await c.list_tools()
             tools = getattr(tools, "tools", tools)
+            assert any(t.name == "start" for t in tools)
             tool = next(t for t in tools if t.name == "inspect")
             assert tool.description and "progress" in str(tool.output_schema)
 

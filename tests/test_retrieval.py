@@ -100,6 +100,9 @@ class _FakeResults:
         self.page = page
         self.first = _FakeWaiter()
 
+    def or_(self, other):
+        return self
+
     async def evaluate_all(self, script):
         return self.page.states[self.page.index]
 
@@ -136,6 +139,12 @@ class _FakePage:
 
     def get_by_role(self, role, name, exact=False):
         return _FakeButton(self)
+
+    def get_by_text(self, text):
+        class Missing:
+            async def count(self):
+                return 0
+        return Missing()
 
     async def wait_for_function(self, script, arg, timeout) -> None:
         return None

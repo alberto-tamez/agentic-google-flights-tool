@@ -22,7 +22,7 @@ def test_managed_store_enforces_ttl_and_run_count_inside_owned_root(tmp_path) ->
     third_id, _ = store.save('{"run":3}')
     assert not (store.runs / first_id).exists()
     assert {path.name for path in store.runs.iterdir()} == {second_id, third_id}
-    assert (store.root / ".owned-by-reverse-google-flights").is_file()
+    assert (store.root / ".owned-by-agentic-flights").is_file()
 
 
 def test_cleanup_skips_symlinked_runs_and_never_touches_explicit_exports(tmp_path) -> None:
@@ -111,7 +111,7 @@ def test_cli_stdin_search_returns_handle_and_stdin_filter_uses_no_extra_files(
     tmp_path, monkeypatch, capsys
 ) -> None:
     managed = tmp_path / "managed"
-    monkeypatch.setenv("REVERSE_GOOGLE_FLIGHTS_STORE", str(managed))
+    monkeypatch.setenv("AGENTIC_FLIGHTS_STORE", str(managed))
     monkeypatch.chdir(tmp_path)
 
     class FakeProvider:

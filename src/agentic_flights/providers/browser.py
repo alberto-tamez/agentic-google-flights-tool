@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import re
 from asyncio import Runner, wait_for
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from agentic_flights.models import (
     FlightOption,
@@ -15,6 +18,7 @@ from agentic_flights.providers.base import (
     ProviderError,
     ProviderResult,
 )
+from agentic_flights.providers.budget import remaining
 from agentic_flights.providers.parsing import (
     _choice_identity,
     _parse_complete_itinerary,
@@ -30,39 +34,61 @@ from agentic_flights.providers.traversal import (
 )
 
 _RESULT_SELECTOR = 'div[role="link"][aria-label*="Select flight"]'
+_PAGE_ERROR = re.compile(r"^Oops,? something went wrong[.!]?$", re.IGNORECASE)
 
 
 class BrowserProvider:
-    version = "browser-playwright-v6"
+    version = "browser-playwright-v10"
 
     def __init__(self) -> None:
+        # A visible window is an explicit debugging choice, never an automatic fallback.
+        self._headless = os.environ.get("AGENTIC_FLIGHTS_HEADLESS") != "0"
         self._runner = Runner()
         self._playwright = None
         self._browser = None
+        self._startup_failure: tuple[str, str, dict[str, str]] | None = None
+        self._access_blocked = False
 
     def search(self, spec: SearchSpec) -> ProviderResult:
         # One retry recovers a transient navigation/DOM replacement; repeated
         # failures return evidence to the caller instead of looping indefinitely.
         spent = 0
         for attempt in range(2):
+            self._coverage = SearchCoverage()
             current = spec
             if spec.max_browser_transitions is not None:
                 current = spec.model_copy(
                     update={"max_browser_transitions": spec.max_browser_transitions - spent}
                 )
             try:
-                result = self._runner.run(self._search(current))
+                timeout = remaining()
+                result = self._runner.run(wait_for(self._search(current), timeout=timeout))
                 result.coverage.retries += attempt
                 result.coverage.browser_transitions += spent
                 return ProviderResult(
                     result.status, result.options, result.requests_made + spent, result.coverage
                 )
+            except TimeoutError as exc:
+                raise ProviderError(
+                    "query_timeout", "The query exceeded its time limit.", retryable=True,
+                    requests_made=spent + self._coverage.browser_transitions,
+                    coverage=self._coverage,
+                ) from exc
             except ProviderError as exc:
+                if exc.code == "provider_access_blocked":
+                    self._access_blocked = True
                 exc.requests_made += spent
                 exc.coverage.browser_transitions += spent
                 exc.coverage.retries += attempt
                 raise
             except Exception as exc:
+                if self._browser is not None and not self._browser.is_connected():
+                    message, exception_type, details = _classify_startup_failure(exc)
+                    if details["cause"] == "browser_startup_failure":
+                        message = "The browser process disconnected unexpectedly."
+                        details["cause"] = "browser_process_exit"
+                    self._startup_failure = (message, exception_type, details)
+                    raise self._startup_error() from exc
                 transient = any(
                     word in str(exc).lower()
                     for word in ("not attached", "detached", "timeout", "net::err", "closed")
@@ -115,20 +141,90 @@ class BrowserProvider:
             else "tree"
         )
         _read_continuation(spec, kind)
+        if self._access_blocked:
+            raise ProviderError(
+                "provider_access_blocked",
+                "Google blocked requests earlier in this worker. Stop searching.",
+                coverage=SearchCoverage(blocked=True),
+            )
+        if self._startup_failure is not None:
+            raise self._startup_error()
         if self._browser is None or not self._browser.is_connected():
             await self._close()
-            self._playwright = await async_playwright().start()
             try:
-                self._browser = await self._playwright.chromium.launch(
-                    channel="chrome", headless=True
-                )
-            except Exception:
-                self._browser = await self._playwright.chromium.launch(headless=True)
+                self._playwright = await async_playwright().start()
+                if self._headless:
+                    # Omitting channel uses Playwright's separate headless shell.
+                    # The full Chrome-for-Testing app registers with macOS even in
+                    # new-headless mode and can abort inside a restricted host.
+                    self._browser = await self._playwright.chromium.launch(headless=True)
+                else:
+                    try:
+                        self._browser = await self._playwright.chromium.launch(
+                            channel="chromium", headless=False
+                        )
+                    except Exception as exc:
+                        # Installed Chrome is only a visible-debug fallback for a
+                        # missing managed executable.
+                        if "executable doesn't exist" not in str(exc).lower():
+                            raise
+                        self._browser = await self._playwright.chromium.launch(
+                            channel="chrome", headless=False
+                        )
+            except Exception as exc:
+                self._startup_failure = _classify_startup_failure(exc)
+                raise self._startup_error() from exc
         if spec.search_mode == "discover" or (
             len(segments) == 1 and not spec.require_overhead_cabin_bag
         ):
-            return await _search_discovery_browser(self._browser, query.url(), spec, segments)
-        return await _explore_complete_tickets(self._browser, query.url(), spec, len(segments))
+            return await _search_discovery_browser(
+                self._browser, query.url(), spec, segments, self._coverage
+            )
+        return await _explore_complete_tickets(
+            self._browser, query.url(), spec, len(segments), self._coverage
+        )
+
+    def _startup_error(self) -> ProviderError:
+        message, exception_type, details = self._startup_failure
+        return ProviderError(
+            "browser_startup_error",
+            message,
+            details={"exception_type": exception_type, "phase": "browser_startup", **details},
+            coverage=SearchCoverage(blocked=True),
+        )
+
+
+def _classify_startup_failure(exc: Exception) -> tuple[str, str, dict[str, str]]:
+    raw = str(exc) or type(exc).__name__
+    lower = raw.lower()
+    details: dict[str, str] = {}
+    if "bootstrap_check_in" in lower or "permission denied" in lower:
+        details["cause"] = "host_process_restriction"
+        if "sigtrap" in lower:
+            details["signal"] = "SIGTRAP"
+        elif "sigabrt" in lower:
+            details["signal"] = "SIGABRT"
+        return (
+            "The host blocked the browser process during startup. Change the execution "
+            "authorization before retrying.",
+            type(exc).__name__,
+            details,
+        )
+    for signal in ("SIGABRT", "SIGTRAP", "SIGSEGV"):
+        if f"signal={signal.lower()}" in lower:
+            return (
+                f"The browser process crashed during startup with {signal}.",
+                type(exc).__name__,
+                {"cause": "browser_process_crash", "signal": signal},
+            )
+    if "executable doesn't exist" in lower:
+        return (
+            "Playwright's browser executable is missing. Install Chromium before retrying.",
+            type(exc).__name__,
+            {"cause": "missing_browser"},
+        )
+    first_line = raw.splitlines()[0]
+    return first_line[:500], type(exc).__name__, {"cause": "browser_startup_failure"}
 
 
 def _build_browser_query(
@@ -144,6 +240,12 @@ def _build_browser_query(
         "two_or_fewer": 2,
     }[spec.max_stops.value]
     requested_segments = spec.requested_segments()
+    if any(segment.filters.excluded_airlines for segment in requested_segments):
+        raise ProviderError(
+            "provider_unsupported",
+            "Browser search cannot enforce excluded_airlines; exclusions were not dropped.",
+            details={"field": "excluded_airlines"},
+        )
     flights = [
         flight_query(
             date=segment.departure_date.isoformat(),
@@ -197,6 +299,34 @@ async def _result_labels(results: Any) -> list[str]:
     )
 
 
+async def _new_context(browser: Any) -> Any:
+    # Match the desktop Chrome HTTP client. HeadlessChrome's default UA is blocked
+    # on Google Flights, including when Playwright uses its separate headless shell.
+    return await browser.new_context(
+        locale="en-US",
+        user_agent=(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            f"Chrome/{browser.version} Safari/537.36"
+        ),
+    )
+
+
+async def _wait_for_page_content(page: Any, target: Any, coverage: SearchCoverage) -> None:
+    error = page.get_by_text(_PAGE_ERROR)
+    await target.or_(error).first.wait_for(timeout=60_000)
+    await _check_page_error(page, coverage)
+
+
+async def _check_page_error(page: Any, coverage: SearchCoverage) -> None:
+    error = page.get_by_text(_PAGE_ERROR)
+    if await error.count() and await error.first.is_visible():
+        raise ProviderError(
+            "provider_page_error", "Google Flights displayed: Oops, something went wrong.",
+            retryable=True, coverage=coverage, requests_made=coverage.browser_transitions,
+        )
+
+
 async def _open_search_page(
     context: Any, url: str, coverage: SearchCoverage, spec: SearchSpec
 ) -> Any:
@@ -207,6 +337,7 @@ async def _open_search_page(
     except Exception:
         await page.close()
         raise
+    await _check_access_block(page, coverage)
     if page.url.startswith("https://consent.google.com"):
         reject = page.get_by_role("button", name="Reject all")
         if not await reject.count():
@@ -219,7 +350,21 @@ async def _open_search_page(
             )
         _consume_transition(coverage, spec)
         await reject.click()
+        await _check_access_block(page, coverage)
     return page
+
+
+async def _check_access_block(page: Any, coverage: SearchCoverage) -> None:
+    url = urlsplit(page.url)
+    if url.hostname in {"www.google.com", "google.com"} and url.path.startswith("/sorry/"):
+        coverage.blocked = True
+        await page.close()
+        raise ProviderError(
+            "provider_access_blocked",
+            "Google Flights returned an unusual-traffic block. Stop searching.",
+            coverage=coverage,
+            requests_made=coverage.browser_transitions,
+        )
 
 
 async def _load_source_labels(page: Any, coverage: SearchCoverage, spec: SearchSpec) -> list[str]:
@@ -227,7 +372,7 @@ async def _load_source_labels(page: Any, coverage: SearchCoverage, spec: SearchS
     coverage.last_source_truncated = False
     while True:
         results = page.locator(_RESULT_SELECTOR)
-        await results.first.wait_for(timeout=60_000)
+        await _wait_for_page_content(page, results, coverage)
         raw_labels = [label for label in await _result_labels(results) if label]
         labels = list(dict.fromkeys(raw_labels))
         if spec.retrieval_limit is not None and len(labels) >= spec.retrieval_limit:
@@ -301,7 +446,7 @@ async def _select_label(
     spec: SearchSpec,
 ) -> None:
     results = page.locator(_RESULT_SELECTOR)
-    await results.first.wait_for(timeout=60_000)
+    await _wait_for_page_content(page, results, coverage)
     target_identity = _choice_identity(label)
     # URL changes can precede the next stage's DOM. Wait for the intended
     # observed flight, not merely for any old result to remain visible.
@@ -347,18 +492,22 @@ async def _select_label(
     _consume_transition(coverage, spec)
     previous_url = page.url
     await choice.press("Enter")
-    if terminal:
-        await page.wait_for_url("**/travel/flights/booking**", timeout=60_000)
-        return
     await page.wait_for_function(
-        "previous => window.location.href !== previous",
-        arg=previous_url,
+        """input => /Oops,? something went wrong[.!]?/i.test(document.body?.innerText || '')
+            || window.location.pathname.startsWith('/sorry/')
+            || (input.terminal
+                ? window.location.pathname.startsWith('/travel/flights/booking')
+                : window.location.href !== input.previous)""",
+        arg={"previous": previous_url, "terminal": terminal},
         timeout=60_000,
     )
+    await _check_access_block(page, coverage)
+    await _check_page_error(page, coverage)
 
 
 async def _search_discovery_browser(
-    browser: Any, url: str, spec: SearchSpec, requested_segments: list[Any]
+    browser: Any, url: str, spec: SearchSpec, requested_segments: list[Any],
+    coverage: SearchCoverage | None = None,
 ) -> ProviderResult:
     if spec.continuation:
         spec = spec.model_copy(
@@ -367,8 +516,8 @@ async def _search_discovery_browser(
                 for k in ("retrieval_limit", "load_more_clicks")
             }
         )
-    coverage = SearchCoverage()
-    context = await browser.new_context(locale="en-US")
+    coverage = coverage if coverage is not None else SearchCoverage()
+    context = await _new_context(browser)
     try:
         page = await _open_search_page(context, url, coverage, spec)
         try:
@@ -407,7 +556,8 @@ async def _search_discovery_browser(
 
 
 async def _explore_complete_tickets(
-    browser: Any, url: str, spec: SearchSpec, journey_count: int
+    browser: Any, url: str, spec: SearchSpec, journey_count: int,
+    coverage: SearchCoverage | None = None,
 ) -> ProviderResult:
     if spec.continuation:
         spec = spec.model_copy(
@@ -416,8 +566,8 @@ async def _explore_complete_tickets(
                 for k in ("retrieval_limit", "load_more_clicks")
             }
         )
-    coverage = SearchCoverage()
-    context = await browser.new_context(locale="en-US")
+    coverage = coverage if coverage is not None else SearchCoverage()
+    context = await _new_context(browser)
 
     async def replay(prefix: list[str], *, terminal: bool) -> tuple[Any, str | None]:
         page = await _open_search_page(context, url, coverage, spec)
@@ -431,13 +581,15 @@ async def _explore_complete_tickets(
                     spec=spec,
                 )
             if terminal:
-                await page.get_by_text("Itinerary summary", exact=True).first.wait_for(
-                    timeout=60_000
+                await _wait_for_page_content(
+                    page, page.get_by_text("Itinerary summary", exact=True), coverage
                 )
-                await page.get_by_text("Selected flights", exact=True).first.wait_for(
-                    timeout=60_000
+                await _wait_for_page_content(
+                    page, page.get_by_text("Selected flights", exact=True), coverage
                 )
-                await page.get_by_text("Booking options", exact=True).first.wait_for(timeout=60_000)
+                await _wait_for_page_content(
+                    page, page.get_by_text("Booking options", exact=True), coverage
+                )
                 return await page.locator("body").inner_text(), page.url
             return await _load_source_labels(page, coverage, spec), None
         finally:

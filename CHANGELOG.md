@@ -1,5 +1,77 @@
 # Changelog
 
+## 0.6.7
+
+- Preserve connection-level carrier and flight-number identity from Google booking
+  URLs, including when the visible quote collapses a connection to journey endpoints.
+- Separate insufficient itinerary detail from a confirmed mismatch. Label complete
+  quotes that do not verify the selected flight in compact API responses.
+- Keep later-return and destination-time tradeoffs in alternatives, and expose
+  per-journey times, destination stay, and overnight travel in slim results.
+- Limit default per-query coverage detail to three incomplete queries; aggregate
+  coverage counts and `issues()` retain the full status.
+- Remove the stale tag-triggered PyPI workflow. Releases remain manual.
+
+## 0.6.6
+
+- Add `AgentAPI.start()` and an MCP `start` operation for compact, in-memory exact
+  searches without temporary request files.
+- Keep discovery HTTP-only. Browser startup is now limited to explicit final-price
+  or baggage verification.
+- Use Playwright's separate headless shell for verification so background work does
+  not register the full Chrome-for-Testing application with macOS.
+- Add a subprocess-isolated browser stability test and compact classification for
+  native browser crashes and macOS process restrictions.
+- Shorten the bundled skill and state its authorization, retry, and side-effect limits.
+- Include verification match scope in comparison, inspection, and issues responses.
+- Explicitly report whether the whole selected itinerary matched and which
+  journeys were not compared. A complete fare is not proof of a matching return.
+- Test changed returns for round trips and three-journey selections, including
+  preservation of the scope fields through MCP serialization.
+
+## 0.6.5
+
+- Keep no-self-transfer discovery on HTTP instead of forcing browser processing.
+- Checkpoint batches before searching and after each query; emit progress and
+  heartbeats on stderr while keeping stdout as one JSON response.
+- Add `resume RUN_ID` and automatic bounded CLI work chunks without dropping
+  the original search scope. Explicit exports are updated atomically.
+- Share per-query time limits across built-in HTTP and browser providers;
+  preserve unfinished verification branches and completed quotes on timeout.
+- Checkpoint API exploration and verification, with optional progress callbacks.
+- Test early completion, interruption/resume, and timeout state preservation.
+
+## 0.6.4
+
+- Run verification in Chromium's newer headless mode with a desktop Chrome
+  user-agent. Visible windows require explicit debugging opt-in.
+- Detect Google's "Oops, something went wrong" page during result and booking
+  navigation instead of waiting for missing elements to time out.
+- Test the default launch mode and error-page behavior against a real local DOM.
+
+## 0.6.3
+
+- Recover direct discovery from empty RPC envelopes using fast-flights' HTTP
+  retrieval and embedded JSON parsing, including Google's reject-cookies flow.
+- Parse omitted zero time components and report schema changes as errors.
+- Mark initial-page coverage as incomplete and invalidate old provider caches.
+- Use a visible tool-managed browser for verification; headless mode is opt-in.
+- Return CLI exit status 1 when searches fail while retaining the JSON report.
+- Preserve HTTP airline names and match verification on shared flight evidence;
+  reject conflicting flight numbers when both sources provide them.
+- Test the installed command, real HTTP-response replay, and a live browser-free
+  search/list/show workflow that requires priced flights.
+
+## 0.6.2
+
+- Reuse and close browser providers; prefer managed Chromium and stop repeating
+  failed launches or requests blocked by Google within a worker.
+- Report unsupported browser airline exclusions instead of silently dropping them,
+  and preserve direct-provider errors when browser fallback also fails.
+- Clarify exact, multi-city, and directional-filter workflows in the skill.
+- Add `agentic-flights --version` and exclude local experiments from Git and builds.
+- Remove retired skill copies and legacy `reverse-google-flights` storage names.
+
 ## 0.6.1
 
 - Updated the bundled Codex and Claude Code skill to use smart provider selection

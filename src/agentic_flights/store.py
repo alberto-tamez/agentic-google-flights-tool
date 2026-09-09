@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 RUN_ID = re.compile(r"^rgf_[0-9a-f]{16}$")
-SENTINEL = ".owned-by-reverse-google-flights"
-SENTINEL_TEXT = "reverse-google-flights managed store v1\n"
+SENTINEL = ".owned-by-agentic-flights"
+SENTINEL_TEXT = "agentic-flights managed store v1\n"
 
 
 class StoreError(ValueError):
@@ -176,10 +176,10 @@ class ManagedStore:
 
 
 def _default_root() -> Path:
-    configured = os.environ.get("REVERSE_GOOGLE_FLIGHTS_STORE")
+    configured = os.environ.get("AGENTIC_FLIGHTS_STORE")
     if configured:
         return Path(configured)
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Caches" / "reverse-google-flights"
+        return Path.home() / "Library" / "Caches" / "agentic-flights"
     cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return cache_root / "reverse-google-flights"
+    return cache_root / "agentic-flights"

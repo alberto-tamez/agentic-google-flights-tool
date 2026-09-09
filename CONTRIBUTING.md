@@ -11,6 +11,11 @@ Before starting a large change, open an issue to check whether it fits the proje
 5. Keep generated search results, browser caches, and personal travel data out of commits.
 
 Tests should be offline by default. Mark tests that contact Google with `pytest.mark.live` and run them only when the external request is the point of the test.
+Run `uv run pytest -m live tests/test_live_provider.py` before releasing provider
+changes. It runs the installed CLI without cached results or browser fallback,
+requires priced one-way and round-trip search results, and checks list/show retrieval.
+It fails on blocked access, empty results, and parsing losses. Run it manually;
+Google availability can change independently of the code.
 
 Run `uv run python scripts/run_feature_tests.py` for fresh randomized feature cases.
 The runner prints a seed and replay command without saving reports. To retain a run,

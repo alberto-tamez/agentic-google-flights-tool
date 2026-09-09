@@ -6,38 +6,50 @@ license: MIT
 
 # Agentic Flights
 
-Use the installed `agentic-flights` command and `agentic_flights.AgentAPI`.
-Keep full search reports behind their `rgf_...` run IDs; return compact comparisons.
-The tool requires Python 3.11+. Chrome or Playwright Chromium is needed when it
-checks final prices and baggage or falls back from direct search.
+Use Python 3.11+ and the installed `agentic_flights.AgentAPI`. Keep full reports behind their
+`rgf_...` run IDs and return only useful comparisons.
 
-## Find flights
+## Search
 
-1. Resolve cities to explicit airport codes and relative dates to concrete dates.
-   Preserve adults, children, seated infants, lap infants, cabin, bags, airline
-   inclusions or exclusions, connections, layover windows, emissions preferences,
-   and fare restrictions when the user supplies them. Infer ordinary preferences
-   when reasonable; ask only when missing information would materially change the trip.
-2. Use `AgentAPI.plan()` and `AgentAPI.explore()` in Python for flexible searches.
-   Use the default provider: it chooses fast direct requests for discovery and the
-   browser for final-price and baggage verification.
-   Continue while `progress.can_continue` unless the user supplied a real budget
-   or the observed options already satisfy their stated goal. A work chunk controls
-   one call's latency; it is not a total-search limit.
-3. Use `compare()` with an explicit currency. Use `alternatives()` to find choices
-   that balance price, travel time, and stops. Inspect only promising result IDs.
-4. Use `verify()` to check the current total trip price or baggage rules. Inspect
-   `matching_result_ids`; do not present different fresh flights as the selected one.
-5. Report prices, dates, airports, duration, stops, baggage evidence, freshness,
-   and incomplete coverage. Do not claim a global minimum or book the ticket.
+- Resolve cities and relative dates before calling the API. Preserve the user's
+  travelers, cabin, bags, stops, timing, airline, fare, and emissions constraints.
+  Ask only when missing information would change the trip.
+- Pass compact in-memory dictionaries. Never create a JSON request file for an
+  agent-driven call. Omit default fields and invented limits.
+- Exact trips use `AgentAPI.start(search)`; pass a list only for multiple searches.
+  Open-jaw and multi-city trips are one search with `additional_segments`. Flexible
+  airports, dates, or trip lengths use `AgentAPI.plan()` followed by `explore()`.
+  `start()` supplies the request ID and discovery mode when omitted.
+- Continue the returned run while `progress.can_continue`, unless the user's goal
+  is already met. A work chunk limits one call, not the whole search. Read
+  `issues()` after errors; retry only after the input, authorization, or environment
+  changed.
+- Use `compare()` with an explicit currency, then `alternatives()` and `inspect()`
+  only for promising result IDs.
+- `alternatives()` keeps useful time tradeoffs, including later returns that add
+  destination time. Compare the per-journey departure and arrival fields.
 
-## Load details only when needed
+## Verify and report
 
-- Run `agentic-flights guide operations` to discover the API.
-- Run `agentic-flights guide <operation>` for one operation's input schema.
-- Run `agentic-flights guide reference` for the complete Python example.
-- Use `AgentAPI.issues(run_id)` for failed or incomplete queries without loading
-  the full report.
+Use `verify()` on shortlisted IDs for current total price and cabin-bag evidence.
+Only `complete_single_ticket` plus `provider_final_total` confirms a ticket total.
+Never sum one-way fares or substitute an unmatched flight. An outbound match does
+not confirm the selected return; check `whole_itinerary_matched` and
+`uncompared_journey_indexes`. Treat `insufficient_detail`, `pending`, and `blocked`
+as unverified. In verification responses, only rows marked `matched_selection`
+confirm the selected flight.
 
-If the command is unavailable, install it with
-`python -m pip install agentic-flights`.
+Report price, dates, airports, duration, stops, baggage evidence, freshness, and
+incomplete coverage. Do not claim a global minimum or book.
+
+## Side effects and failures
+
+Discovery uses HTTP and must not launch a browser. Verification may launch
+Playwright's isolated Chromium headless shell; it does not use the user's browser.
+Use the harness's normal authorization prompt only when needed. Never switch to a
+visible browser, sign in, book, or submit traveler
+or payment data. Keep retry narration out of chat unless it changes the result.
+Failed or blocked rows are errors, not flight results.
+
+Use `agentic-flights guide <topic>` only for an unfamiliar schema or recovery path.
+If the command is missing, install it with `python -m pip install agentic-flights`.

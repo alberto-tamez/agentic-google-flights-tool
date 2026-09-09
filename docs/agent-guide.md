@@ -6,7 +6,7 @@ useful alternatives with evidence. After installation, no repository checkout is
 ## Start
 
 Use Python 3.11+ and install `agentic-flights`. An installed Google Chrome or
-Playwright Chromium is needed for verification and direct-search fallback. Read
+Playwright Chromium is needed only for verification. Read
 `agentic-flights guide reference` for the complete Python example. Load `agentic-flights guide space`,
 `search`, or `filters` for only the schema you need; `operations` lists the API. For operation inputs, use `agentic-flights guide verify`
 or the corresponding operation name; class introspection is unnecessary.
@@ -26,8 +26,10 @@ self-transfer rules, and basic-economy exclusions when supplied.
 
 Use `AgentAPI.plan` to validate and save a `SearchSpace` without making flight
 requests. `AgentAPI.explore` accepts the saved run ID and returns a new snapshot.
-Its default provider uses direct requests for discovery and browser traversal for
-verification; agents normally should not select a provider themselves.
+For an exact trip, pass one compact dictionary directly to
+`AgentAPI.start`; it assigns omitted request IDs and starts in discovery mode.
+Do not create a temporary JSON input file for an agent-driven search. The default
+provider uses HTTP for discovery and browser traversal only for verification.
 Each chunk visits airport pairs and dates broadly and interleaves promising
 unfinished queries. Save the latest run ID. All original queries and continuation
 state are stored with it, so another process can continue.
@@ -40,6 +42,10 @@ Query errors are retained; inspect
 and retry retryable errors explicitly. An unresolved branch or parse failure means
 coverage is incomplete even if every route/date query was attempted.
 
+Use the host's normal authorization flow for network or browser access. Do not ask
+for broad permission in chat, switch to a visible browser after a failure, or retry
+an unchanged blocked environment. A failed query remains an error, never inventory.
+
 Start with `search_mode="discover"` for broad comparison. For long verification
 work, set an explicit `work_quotes` execution chunk and continue its returned run
 with `explore`. Finite query retrieval/candidate/quote settings retain continuation
@@ -50,7 +56,9 @@ load timeouts can still interrupt the work.
 
 Use `compare` with filters to rank saved results without searching again. Select a
 currency before comparing prices from different currencies. `alternatives` returns
-choices that balance price, travel time, and stops instead of assuming cheapest is best.
+choices that balance price, travel time, stops, departure inconvenience, and time at
+the destination instead of assuming cheapest is best. Slim results include each
+journey's departure and arrival, destination stay minutes, and overnight journeys.
 `inspect` expands only selected result IDs, including their original query and
 requested return date. Keep full reports outside the conversation.
 
@@ -58,8 +66,14 @@ Early prices for trips with more than one flight are not confirmed totals. Call
 `verify` on selected result IDs for current total prices and baggage. It reports
 whether it found the same flights; it must not silently substitute another flight.
 A match for the departure flight confirms only that flight, not a specific return.
-Matching uses the route, local times, airline, and flight number where known, not a
-booking-system ID. Inspect `matching_result_ids` to retrieve the exact verified results.
+Check `whole_itinerary_matched` and `uncompared_journey_indexes` alongside `match_scope`.
+On a round trip, `[1]` means the return was not compared with an earlier selection.
+Matching uses provider segment references when Google supplies them. These references
+retain every connection's route, date, carrier, and flight number even when the visible
+booking summary collapses a journey to its endpoints. `insufficient_detail` means the
+journey summary matched but the connection identity could not be proved. It is different
+from `not_matched`, which records conflicting itinerary evidence. Inspect
+`matching_result_ids` to retrieve the exact verified results.
 If a match is pending, continue its saved run. If it is absent, report that clearly.
 
 Never sum independent one-way fares and label them a complete ticket. A complete
@@ -73,6 +87,9 @@ Follow executable `next_actions` when helpful. Read `issues` for failed or block
 queries instead of dumping all results. Empty selections are valid no-ops; if no
 options match, report that rather than assuming a booking is available. MCP errors
 return `ok=false` with field-level validation and a suggested repair action.
+Verification responses also include `evidence_status`. It counts complete quotes and
+matched selected itineraries separately. Preview and result rows label a quote as
+`matched_selection`, `other_complete_quote`, or `not_a_complete_quote`.
 
 ## Return a decision
 

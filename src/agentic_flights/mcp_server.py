@@ -14,7 +14,15 @@ from agentic_flights.api import AgentAPI
 
 class NextAction(BaseModel):
     operation: Literal[
-        "schema", "plan", "explore", "compare", "alternatives", "inspect", "verify", "issues"
+        "schema",
+        "plan",
+        "start",
+        "explore",
+        "compare",
+        "alternatives",
+        "inspect",
+        "verify",
+        "issues",
     ]
     arguments: dict[str, Any]
     reason: str | None = None
@@ -22,8 +30,20 @@ class NextAction(BaseModel):
 
 class VerificationMatch(BaseModel):
     selected_result_id: str
-    status: Literal["matched_observed_itinerary", "pending", "blocked", "not_matched"]
+    status: Literal[
+        "matched_observed_itinerary",
+        "pending",
+        "blocked",
+        "insufficient_detail",
+        "not_matched",
+    ]
     match_scope: Literal["outbound", "whole_itinerary"]
+    whole_itinerary_matched: bool
+    uncompared_journey_indexes: list[int]
+    identity_basis: Literal[
+        "provider_segments", "detailed_schedule", "journey_summary", "none"
+    ]
+    complete_quotes_found: int
     matching_quotes: int
     matching_result_ids: list[str]
     evidence: str
@@ -72,7 +92,12 @@ def _handler(method):
                 if isinstance(exc, ValidationError)
                 else []
             )
-            topic = {"plan": "space", "compare": "filters", "alternatives": "filters"}.get(
+            topic = {
+                "plan": "space",
+                "start": "start",
+                "compare": "filters",
+                "alternatives": "filters",
+            }.get(
                 method.__name__, method.__name__ if method.__name__ != "schema" else "operations"
             )
             return ToolResponse(
@@ -107,14 +132,14 @@ def create_server(api: AgentAPI | None = None):
     server = MCPServer(
         "Agentic Flights",
         instructions=(
-            "Call schema for focused input documentation. Use plan/explore in code, then compare "
-            "and inspect saved results. Continue work chunks until the goal is met; a chunk is not "
-            "a search cutoff. Verification reports itinerary matches explicitly."
+            "Use start for exact trips and plan for flexible date or airport searches. Continue "
+            "saved runs with explore. Compare before inspecting or verifying selected results."
         ),
     )
     for name in (
         "schema",
         "plan",
+        "start",
         "explore",
         "compare",
         "alternatives",

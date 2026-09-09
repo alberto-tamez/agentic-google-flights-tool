@@ -32,9 +32,11 @@ installed skill.
 
 ```python
 from datetime import date, timedelta
+import json
+import sys
 from agentic_flights import AgentAPI, SearchSpace, SearchSpec
 
-api = AgentAPI()
+api = AgentAPI(on_progress=lambda event: print(json.dumps(event), file=sys.stderr, flush=True))
 departure = date.today() + timedelta(days=60)
 space = SearchSpace(
     template=SearchSpec(
@@ -79,7 +81,36 @@ batches. A provider implements `search(SearchSpec) -> ProviderResult` and may ex
 Use `api.schema("verify")` or another operation name for its inputs and description;
 no class or source inspection is needed. `schema("operations")` lists all operations.
 
+For an exact trip, call the API without a request file:
+
+```python
+run = api.start({
+    "origin": "MAD", "destination": "LHR", "departure_date": "2027-01-14",
+    "return_date": "2027-01-21", "currency": "EUR", "language": "en-US",
+    "country": "ES",
+})
+```
+
+`start()` supplies a numeric `request_id` and `search_mode="discover"` when omitted.
+Pass only fields needed by the trip. The returned run resumes through `explore()`.
+
 ## Response handling
+
+### Exact trips, open jaw, and multi-city
+
+`plan()` expands one-way templates into one-way or round-trip searches. It rejects
+both `return_date` and `additional_segments` in the template. For exact trips,
+including open jaw and multi-city, pass complete search dictionaries to
+`AgentAPI.start()`. Use
+`additional_segments` for every flight after the first; leave `return_date` unset
+when using those segments. This preserves a different return origin in an open jaw.
+
+`segment_filters` applies to the outbound journey, `return_segment_filters` to the
+return, and `additional_segments[].filters` to the corresponding journey. Repeat
+trip-wide airline, time, connection, and emissions requirements on each journey.
+Planner acceptance checks input shape; it does not prove live flight availability.
+
+### Progress and errors
 
 Every data operation returns `run_id`, `progress`, and executable `next_actions`
 with operation names and real arguments. `progress.can_continue` is consistent
@@ -108,6 +139,38 @@ handle branches from it. Restoring with `Exploration.restore` needs only the han
 executor, and store. `retry_errors=True` explicitly retries unresolved query errors.
 Original failures remain in saved history and are counted in `failure_events`.
 
+CLI batches default to eight uncached queries per call and stop starting new work
+after 20 seconds. The full input is saved before the first query, then checkpointed
+after each completion, including when other workers are still busy. Read
+`batch_progress.remaining_queries`, `pending_queries`, and `can_continue`, then run
+the returned `resume_command`, such as `agentic-flights resume RUN_ID`. Resuming
+skips completed queries and retains their results even when the fare cache is disabled.
+Use `--retry-errors` to explicitly retry failed queries without a continuation.
+
+Progress is newline-delimited JSON on stderr, including query starts, completions,
+active request IDs, checkpoint run IDs, and five-second heartbeats. Stdout remains
+one final JSON response. `--output PATH` is replaced atomically with each checkpoint.
+If the process is terminated before stdout is produced, use the last stderr run ID
+or the output file. SIGINT returns the partial report with exit status 130 after
+in-flight work and cleanup finish; completed checkpoints also survive SIGTERM.
+
+Set `work_chunk`, `chunk_seconds`, and `query_timeout_seconds` in batch input, or
+override them with `--work-chunk`, `--chunk-seconds`, and `--query-timeout-seconds`.
+Built-in providers share a 60-second query deadline across HTTP and browser operations.
+A chunk's 20-second limit controls scheduling, not total
+wall time: already-running queries may use their remaining allowance plus cleanup.
+Timeouts produce `query_timeout`, never empty inventory. Verification keeps completed
+quotes and unfinished branches in the timeout continuation.
+
+`api.explore(chunk_seconds=20)` uses the same scheduling rule. API exploration and
+verification also checkpoint each completion. Supply `AgentAPI(on_progress=callback)`
+to receive event dictionaries and the latest resumable run ID. Callbacks run from
+worker threads under a lock and should return promptly. The normal API return value
+still contains the final snapshot for that work chunk. Custom provider implementations
+must honor their own I/O deadlines; arbitrary blocking Python code cannot be killed
+safely by the thread executor. Configure built-in query time limits with
+`BatchExecutor(..., query_timeout_seconds=120)` when needed.
+
 SearchSpec's `retrieval_limit`, `load_more_clicks`, `candidates_per_stage`,
 `max_complete_quotes`, and `max_browser_transitions` have no configured limit when
 unset. Finite values schedule resumable work. Returned `coverage.continuation`
@@ -129,7 +192,9 @@ hour windows, `require_overhead_cabin_bag`, and `ticket_scope` in `compare`.
 Mixed-currency price sorting/filtering without a currency raises an explicit error.
 Sort keys are `price`, `duration`, `stops`, and `departure`. Filtering happens before
 pagination; pass the returned cursor with the same filters. `alternatives` retains
-price/duration/stops compromises within the same ticket and price scope. Partial
+price, duration, stop, departure-time, and destination-time compromises within the
+same ticket and price scope. Slim results expose per-journey times,
+`destination_stay_minutes`, and `overnight_journey_indexes`. Partial
 outbound observations cannot dominate complete tickets. Both `compare` and
 `alternatives` paginate; follow their returned cursor or executable next action.
 Baggage status in a slim result refers to the whole requested trip; partial evidence
@@ -140,11 +205,26 @@ and return dates; `inspect` returns the full original query. Legacy reports with
 this metadata can be read, but cannot be verified by selected result IDs.
 
 `verify` bypasses the normal fare cache. Its `verification` entries distinguish
-`matched_observed_itinerary`, `pending`, `blocked`, and `not_matched`. A result ID identifies
+`matched_observed_itinerary`, `pending`, `blocked`, `insufficient_detail`, and
+`not_matched`. A result ID identifies
 an immutable snapshot record; changing prices or ranks creates different IDs.
 Use `matching_result_ids` to inspect only the quotes that matched the selection.
 Other quotes in that verification run are alternatives, not verified matches.
 Never interpret a fresh but different returned itinerary as the selected flight.
+Provider segment identity retains the route, date, carrier, and flight number for each
+connection from Google's booking URL. `insufficient_detail` means only a matching
+journey summary was available. `not_matched` means the available evidence conflicted.
+The top-level `evidence_status` counts complete quotes separately from selected-flight
+matches. Each preview or result row has a `selection_verification` label.
+The same `verification` entries accompany comparison, inspection, and issues responses
+for a verification run. For example, an outbound-only match on a round trip reports
+`match_scope: "outbound"`, `whole_itinerary_matched: false`, and
+`uncompared_journey_indexes: [1]`. Journey 0 is outbound; later indexes are return
+or onward journeys. Those later flights are newly quoted choices and have not been
+matched against a prior selection, even when the total and baggage cover the whole ticket.
+`whole_itinerary_matched: true` requires a whole-itinerary comparison with at least
+one matching quote; only its `matching_result_ids` are matches. If a previously
+selected return changes, that quote is not a whole-itinerary match.
 
 ## CLI and MCP
 
@@ -169,16 +249,60 @@ Managed runs expire after seven idle days by default; storage defaults are 50 ru
 and 100 MB across managed reports/provider cache. These storage policies are
 configurable with `ManagedStore(policy=StorePolicy(...))`. Export persistent results
 before expiration. Missing/expired handles return errors, not invented results.
+If the default cache directory is not writable, set `AGENTIC_FLIGHTS_STORE`
+to a dedicated writable directory and keep that value when resuming saved runs.
+`AgentAPI()` reads this override; its optional `store` argument takes a `ManagedStore`
+object, not a path string.
+Use the same Python environment for the CLI and API; check its installed version
+with `python -c 'import importlib.metadata; print(importlib.metadata.version("agentic-flights"))'`.
 
-Browser verification uses installed Chrome or Playwright Chromium. It reads English
+Browser verification uses Playwright's separate Chromium headless shell with a
+desktop Chrome user-agent. It does not launch the full Chrome-for-Testing app in
+background mode. Searches do not open visible windows by default.
+`AGENTIC_FLIGHTS_HEADLESS=0` explicitly enables visible windows for debugging;
+only that mode may fall back to installed Chrome when managed Chromium is missing.
+The provider never switches to visible mode automatically after a failure.
+A startup failure blocks further launches
+in that worker; fix the environment before explicitly retrying. It reads English
 Google Flights labels. Browsers are reused within a batch; each query gets
 an isolated context. Transient DOM replacement/navigation gets a recovery attempt;
 repeated failures return explicit errors or continuations. Page operation timeouts
 bound a hung I/O operation, not total search scope.
 
+Before releasing a Playwright or macOS change, run the opt-in browser stability test:
+
+```sh
+uv run pytest -m integration \
+  tests/test_browser_lifecycle.py::test_background_browser_survives_repeated_isolated_launches
+```
+
+It starts three independent browser processes and performs a context and page operation.
+Each attempt runs in a child Python process, so `SIGABRT`, `SIGTRAP`, early disconnects,
+and launch errors become test failures with compact diagnostics. This tests the current
+machine, Playwright build, and execution permissions; it cannot guarantee another host.
+
+Google's "Oops, something went wrong" page is detected during result, navigation,
+and booking waits and reported as `provider_page_error` without waiting for the
+ordinary 60-second result timeout. Failed verification branches retain this code
+in their coverage diagnostics.
+Google unusual-traffic pages return `provider_access_blocked` immediately and stop
+further requests in that worker. Stop the search rather than retrying the block.
+Browser searches currently reject `excluded_airlines` with `provider_unsupported`;
+the direct provider encodes exclusions, but browser verification cannot silently
+drop them. Retaining a field in a plan is not evidence that every provider supports it.
+
 The default smart provider uses direct Google requests for broad discovery and the
-browser for final-price and baggage verification. `direct` and `browser` remain
+browser only for final-price and baggage verification. A discovery failure never
+launches a browser. `direct` and `browser` remain
 available when a caller needs to select one explicitly.
+If the shopping RPC returns no payload, direct discovery uses fast-flights' HTTP
+approach to read embedded JSON from the public Flights page. It rejects optional
+cookies when prompted and preserves the original currency and country parameters.
+This path does not launch a browser. It reports `initial_page` coverage as truncated;
+the initial response does not establish that every available flight was retrieved.
+Airline exclusions require the RPC; the HTTP path reports unsupported exclusions
+instead of dropping them. CLI searches return status 1 on any failed query and still
+write the normal JSON report. An empty or blocked response is not a live-test pass.
 Development setup: `uv sync --extra dev --extra mcp`; run `uv run pytest` and
 `uv run ruff check .`. Repository examples use concrete dates; refresh them with
 `uv run python scripts/refresh_example_dates.py` before using them.

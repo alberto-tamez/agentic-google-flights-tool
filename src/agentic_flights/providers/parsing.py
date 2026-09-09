@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import re
+from base64 import urlsafe_b64decode
 from datetime import UTC, date, datetime
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from agentic_flights.models import (
     BaggageAllowance,
     BaggageStatus,
     FlightLeg,
     FlightOption,
+    FlightSegmentIdentity,
     SearchCoverage,
     SearchSpec,
 )
@@ -199,6 +202,7 @@ def _parse_complete_itinerary(
         booking_body, final_total, spec.currency
     )
     baggage = _parse_baggage_allowance(fare_evidence, journey_count=len(journeys))
+    identity_segments = _parse_booking_segment_identities(source_url, requested)
     legs = [
         leg.model_copy(update={"journey_index": index})
         for index, journey in enumerate(journeys)
@@ -218,8 +222,110 @@ def _parse_complete_itinerary(
         booking_provider=booking_provider,
         fare_name=fare_name,
         source_url=source_url,
+        identity_segments=identity_segments,
         legs=legs,
     )
+
+
+def _parse_booking_segment_identities(
+    source_url: str | None, requested: list[Any] | None = None
+) -> list[FlightSegmentIdentity]:
+    """Read exact selected segments from the booking URL's protobuf query."""
+    if not source_url:
+        return []
+    values = parse_qs(urlsplit(source_url).query).get("tfs", [])
+    if len(values) != 1:
+        return []
+    try:
+        encoded = values[0].replace(" ", "+")
+        payload = urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        journeys = [
+            value
+            for field, wire, value in _protobuf_fields(payload)
+            if (field, wire) == (3, 2)
+        ]
+        parsed: list[FlightSegmentIdentity] = []
+        for journey_index, journey in enumerate(journeys):
+            segments = [
+                value
+                for field, wire, value in _protobuf_fields(journey)
+                if (field, wire) == (4, 2)
+            ]
+            for segment in segments:
+                fields = {
+                    field: value.decode("ascii")
+                    for field, wire, value in _protobuf_fields(segment)
+                    if wire == 2 and field in {1, 2, 3, 5, 6}
+                }
+                parsed.append(
+                    FlightSegmentIdentity(
+                        journey_index=journey_index,
+                        origin=fields[1],
+                        departure_date=date.fromisoformat(fields[2]),
+                        destination=fields[3],
+                        airline_code=fields.get(5),
+                        flight_number=fields.get(6),
+                    )
+                )
+    except (KeyError, UnicodeDecodeError, ValueError):
+        return []
+    if not parsed:
+        return []
+    if requested is None:
+        return parsed
+    if len(journeys) != len(requested):
+        return []
+    for index, segment in enumerate(requested):
+        selected = [item for item in parsed if item.journey_index == index]
+        if (
+            not selected
+            or selected[0].origin != segment.origin
+            or selected[-1].destination != segment.destination
+            or selected[0].departure_date != segment.departure_date
+        ):
+            return []
+    return parsed
+
+
+def _protobuf_fields(payload: bytes) -> list[tuple[int, int, int | bytes]]:
+    """Decode only the protobuf wire types used by Google Flights booking URLs."""
+    fields: list[tuple[int, int, int | bytes]] = []
+    offset = 0
+    while offset < len(payload):
+        key, offset = _read_varint(payload, offset)
+        field, wire = key >> 3, key & 7
+        if field == 0:
+            raise ValueError("invalid protobuf field")
+        if wire == 0:
+            value, offset = _read_varint(payload, offset)
+        elif wire == 1:
+            value, offset = payload[offset : offset + 8], offset + 8
+        elif wire == 2:
+            size, offset = _read_varint(payload, offset)
+            value, offset = payload[offset : offset + size], offset + size
+            if len(value) != size:
+                raise ValueError("truncated protobuf field")
+        elif wire == 5:
+            value, offset = payload[offset : offset + 4], offset + 4
+        else:
+            raise ValueError("unsupported protobuf wire type")
+        if offset > len(payload):
+            raise ValueError("truncated protobuf field")
+        fields.append((field, wire, value))
+    return fields
+
+
+def _read_varint(payload: bytes, offset: int) -> tuple[int, int]:
+    value = 0
+    shift = 0
+    while offset < len(payload) and shift < 70:
+        byte = payload[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if byte < 0x80:
+            return value, offset
+        shift += 7
+    raise ValueError("invalid protobuf varint")
 
 
 def _parse_selected_booking_option(

@@ -27,8 +27,8 @@ currency, baggage, stop limits, and timing or airline preferences].
 
 ## Install it yourself
 
-Agentic Flights requires Python 3.11 or newer. It uses Google Chrome if installed.
-Otherwise, install Chromium:
+Agentic Flights requires Python 3.11 or newer. Discovery uses direct HTTP requests.
+Final-price verification uses a tool-managed browser. Install Chromium for it:
 
 ```sh
 python -m pip install -U agentic-flights
@@ -52,20 +52,30 @@ skill unless you pass `--force`.
 - Explore nearby airports, dates, and stay lengths; filter by price, stops, airline,
   connection, layover, time, duration, emissions, and baggage.
 - Search for adults, children, and infants, including lap infants.
-- Compare price against travel time without mixing different currencies.
-- Check the current total price, same-flight match, baggage rules, and booking links.
+- Compare price against travel time, departure hour, and time at the destination
+  without mixing different currencies.
+- Check the current total price, connection-level same-flight match, baggage rules,
+  and booking links.
 - Say when it could not read a flight, stopped early, or still has work to do.
 
 ## Ways agents can use it
 
 The skill is the easiest way to start. Broad searches use a fast direct request;
-final-price and baggage checks use the browser. The package also has a Python API, a
+final-price and baggage checks use a background browser. The package also has a Python API, a
 command-line interface, and an optional local MCP connection for AI apps:
 
 ```sh
 python -m pip install -U "agentic-flights[mcp]"
 agentic-flights-mcp
 ```
+
+Large CLI searches return resumable work chunks. Progress and checkpoint run IDs
+appear on stderr; the final JSON includes `batch_progress` and a `resume_command`.
+Completed queries survive interruption. Run `agentic-flights resume RUN_ID` to continue.
+
+Agents can pass an exact search directly with `AgentAPI.start({...})`; no temporary
+request file is needed. Discovery stays HTTP-only. A headless browser starts only
+when final prices or baggage are verified.
 
 Run `agentic-flights guide` for the workflow or `agentic-flights guide <operation>`
 for one operation. Saved searches stay on your computer and expire after seven days

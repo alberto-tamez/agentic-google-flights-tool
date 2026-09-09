@@ -13,6 +13,7 @@ from typing import Any
 
 from agentic_flights.models import FlightLeg, FlightOption, SearchCoverage, SearchSpec
 from agentic_flights.providers.base import ProviderError, ProviderResult
+from agentic_flights.providers.budget import note_request, remaining
 
 _URL = (
     "https://www.google.com/_/FlightsFrontendUi/data/"
@@ -23,10 +24,11 @@ _URL = (
 class DirectProvider:
     """Retrieve broad shopping results without starting a browser."""
 
-    version = "direct-google-v1"
+    version = "direct-google-http-v2"
 
     def __init__(self, client: Any | None = None) -> None:
         self.client = client
+        self._page_client: Any | None = None
 
     def search(self, spec: SearchSpec) -> ProviderResult:
         if spec.search_mode != "discover":
@@ -34,26 +36,43 @@ class DirectProvider:
                 "provider_unsupported",
                 "Direct search is for discovery; use the browser provider for verification.",
             )
-        try:
-            response = self._post(_localized_url(spec), data=f"f.req={_encode_request(spec)}")
-            response.raise_for_status()
-        except Exception as exc:
-            raise ProviderError(
-                "direct_provider_error",
-                str(exc) or type(exc).__name__,
-                retryable=True,
-                details={"exception_type": type(exc).__name__},
-                requests_made=1,
-            ) from exc
-        inner = _first_payload(response.text)
+        inner = None
+        requests_made = 0
+        # The flat RPC format cannot express this flag; the tfs HTTP query can.
+        if not spec.hide_separate_and_self_transfer:
+            try:
+                requests_made = 1
+                response = self._post(_localized_url(spec), data=f"f.req={_encode_request(spec)}")
+                response.raise_for_status()
+            except ProviderError:
+                raise
+            except Exception as exc:
+                remaining()  # Preserve an exhausted overall deadline as query_timeout.
+                raise ProviderError(
+                    "direct_provider_error",
+                    str(exc) or type(exc).__name__,
+                    retryable=True,
+                    details={"exception_type": type(exc).__name__},
+                    requests_made=1,
+                ) from exc
+            inner = _first_payload(response.text)
+        from_page = inner is None
         if inner is None:
-            raise ProviderError(
-                "provider_response_error",
-                "Google Flights returned no readable direct-search payload.",
-                retryable=True,
-                requests_made=1,
-            )
-        rows = _flight_rows(inner)
+            from agentic_flights.providers.http_page import FlightPageClient
+
+            if self._page_client is None:
+                self._page_client = FlightPageClient()
+            try:
+                inner, page_requests = self._page_client.fetch(spec)
+                requests_made += page_requests
+            except ProviderError as exc:
+                exc.requests_made += requests_made
+                raise
+        try:
+            rows = _flight_rows(inner)
+        except ProviderError as exc:
+            exc.requests_made += requests_made
+            raise
         options: list[FlightOption] = []
         failures: list[str] = []
         for row in rows:
@@ -66,7 +85,9 @@ class DirectProvider:
             source_candidates_loaded=len(rows),
             source_parse_failures=len(rows) - len(options),
             source_parse_failure_samples=failures,
-            fully_explored=not failures,
+            fully_explored=not failures and not from_page,
+            source_truncated=from_page,
+            source_load_stop_reason="initial_page" if from_page else "not_applicable",
         )
         if rows and not options:
             raise ProviderError(
@@ -74,12 +95,14 @@ class DirectProvider:
                 "Google Flights returned results in an unreadable direct-search shape.",
                 retryable=True,
                 details={"samples": failures},
-                requests_made=1,
+                requests_made=requests_made,
                 coverage=coverage,
             )
-        return ProviderResult("success" if options else "empty", options, 1, coverage)
+        return ProviderResult("success" if options else "empty", options, requests_made, coverage)
 
     def _post(self, url: str, **kwargs: Any) -> Any:
+        remaining()
+        note_request()
         if self.client is not None:
             return self.client.post(url, **kwargs)
         from curl_cffi import requests
@@ -88,46 +111,60 @@ class DirectProvider:
             url,
             headers={"content-type": "application/x-www-form-urlencoded;charset=UTF-8"},
             impersonate="chrome",
-            timeout=60,
+            timeout=remaining(60),
             **kwargs,
         )
 
 
 class SmartProvider:
-    """Use direct discovery and browser verification, with a discovery fallback."""
+    """Use HTTP for discovery and a browser only for explicit verification."""
 
-    version = "smart-direct-browser-v1"
+    version = "smart-http-browser-v7"
 
     def __init__(self) -> None:
         self.provider: Any | None = None
+        self._direct = DirectProvider()
+        self._browser: Any | None = None
+        self._access_blocked = False
 
-    def search(self, spec: SearchSpec) -> ProviderResult:
+    def _browser_provider(self) -> Any:
         from agentic_flights.providers.browser import BrowserProvider
 
-        if spec.search_mode == "verify" or spec.hide_separate_and_self_transfer:
-            self.provider = BrowserProvider()
-            return self.provider.search(spec)
-        try:
-            self.provider = DirectProvider()
-            return self.provider.search(spec)
-        except ProviderError as direct_error:
-            self.provider = BrowserProvider()
-            try:
-                result = self.provider.search(spec)
-                return ProviderResult(
-                    result.status,
-                    result.options,
-                    result.requests_made + direct_error.requests_made,
-                    result.coverage,
+        if self._browser is None:
+            self._browser = BrowserProvider()
+        return self._browser
+
+    def search(self, spec: SearchSpec) -> ProviderResult:
+        if spec.search_mode == "verify":
+            if self._access_blocked:
+                raise ProviderError(
+                    "provider_access_blocked",
+                    "Google blocked browser requests earlier in this worker. Stop verifying.",
+                    coverage=SearchCoverage(blocked=True),
                 )
-            except ProviderError as browser_error:
-                browser_error.requests_made += direct_error.requests_made
-                raise
+            self.provider = self._browser_provider()
+            return self._search_browser(spec)
+        self.provider = self._direct
+        return self.provider.search(spec)
+
+    def _search_browser(self, spec: SearchSpec) -> ProviderResult:
+        try:
+            return self.provider.search(spec)
+        except ProviderError as exc:
+            if exc.code == "provider_access_blocked":
+                self._access_blocked = True
+            raise
 
     def close(self) -> None:
-        close = getattr(self.provider, "close", None)
-        if close is not None:
-            close()
+        try:
+            close = getattr(self._browser, "close", None)
+            if close is not None:
+                close()
+        finally:
+            self._browser = self.provider = None
+            close = getattr(self._direct, "close", None)
+            if close is not None:
+                close()
 
 
 def _encode_request(spec: SearchSpec) -> str:
@@ -237,15 +274,24 @@ def _has_wrb_payload(body: str) -> bool:
 
 
 def _flight_rows(inner: Any) -> list[Any]:
-    try:
-        return [
-            item
-            for index in (2, 3)
-            if isinstance(inner[index], list)
-            for item in inner[index][0]
-        ]
-    except (IndexError, TypeError):
-        return []
+    if not isinstance(inner, list) or len(inner) < 4:
+        raise ProviderError("provider_response_error", "Google Flights response schema changed.")
+    rows = []
+    for group in inner[2:4]:
+        if group is None:
+            continue
+        if not isinstance(group, list) or not group or (
+            group[0] is not None and not isinstance(group[0], list)
+        ):
+            raise ProviderError("provider_response_error", "Google Flights result group changed.")
+        rows.extend(group[0] or [])
+    return rows
+
+
+def _parse_time(value: list[int | None] | None) -> tuple[int, int]:
+    # From fast-flights: Google omits trailing zeroes, e.g. [8] means 08:00.
+    padded = [*(value or []), None, None]
+    return padded[0] or 0, padded[1] or 0
 
 
 def _parse_row(row: list[Any], spec: SearchSpec, rank: int) -> FlightOption:
@@ -253,12 +299,13 @@ def _parse_row(row: list[Any], spec: SearchSpec, rank: int) -> FlightOption:
     legs = []
     for raw in detail[2]:
         airline = raw[22] or []
-        departure = datetime(*raw[20], *raw[8])
-        arrival = datetime(*raw[21], *raw[10])
+        departure = datetime(*raw[20], *_parse_time(raw[8]))
+        arrival = datetime(*raw[21], *_parse_time(raw[10]))
         legs.append(
             FlightLeg(
                 journey_index=0,
                 airline_code=airline[0] if airline else None,
+                airline_name=airline[3] if len(airline) > 3 else None,
                 flight_number=airline[1] if len(airline) > 1 else None,
                 origin=raw[3],
                 destination=raw[6],

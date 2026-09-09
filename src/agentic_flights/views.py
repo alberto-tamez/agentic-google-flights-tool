@@ -4,6 +4,7 @@ import base64
 import binascii
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +53,10 @@ def compact_summary(
             break
     specs = {o.request_id: o.search_spec for o in source.outcomes}
     source_ref = reference or str(artifact)
-    coverage = [_compact_coverage(outcome) for outcome in source.outcomes[:10]]
+    incomplete_outcomes = [
+        outcome for outcome in source.outcomes if not _coverage_complete(outcome)
+    ]
+    coverage = [_compact_coverage(outcome) for outcome in incomplete_outcomes[:3]]
     error_codes: dict[str, int] = {}
     for outcome in source.outcomes:
         if outcome.error:
@@ -63,7 +67,8 @@ def compact_summary(
         "counts": source.counts.model_dump(),
         "total_options": len(flattened),
         "coverage": coverage,
-        "coverage_outcomes_omitted": max(0, len(source.outcomes) - len(coverage)),
+        "coverage_detail": "incomplete_queries_only",
+        "coverage_outcomes_omitted": max(0, len(incomplete_outcomes) - len(coverage)),
         "error_codes": dict(sorted(error_codes.items())),
         "currencies": sorted({item.option.currency for item in flattened}),
         "preview_order": "price_within_currency_and_ticket_scope_round_robin",
@@ -170,7 +175,13 @@ def show_results(
             {
                 "result_id": result_id,
                 "request_id": indexed[result_id].request_id,
-                "option": indexed[result_id].option.model_dump(mode="json"),
+                "option": {
+                    **indexed[result_id].option.model_dump(mode="json"),
+                    "identity_segments": [
+                        segment.model_dump(mode="json")
+                        for segment in _identity_segments(indexed[result_id].option)
+                    ],
+                },
                 "search_spec": (
                     specs[indexed[result_id].request_id].model_dump(
                         mode="json", exclude={"continuation"}
@@ -194,6 +205,7 @@ def _flatten(source: BatchReport) -> list[RankedFlight]:
 
 def _result_id(item: RankedFlight) -> str:
     option = item.option
+    identity_segments = _identity_segments(option)
     identity = {
         "request_id": item.request_id,
         "provider_rank": option.provider_rank,
@@ -208,6 +220,9 @@ def _result_id(item: RankedFlight) -> str:
             }
             for leg in option.legs
         ],
+        "identity_segments": [
+            segment.model_dump(mode="json") for segment in identity_segments
+        ],
         "price": option.price,
         "currency": option.currency,
         "provider": option.booking_provider,
@@ -219,6 +234,8 @@ def _result_id(item: RankedFlight) -> str:
 
 def _slim(item: RankedFlight, spec: SearchSpec | None = None) -> dict[str, Any]:
     option = item.option
+    identity_segments = _identity_segments(option)
+    journeys = _journey_windows(option)
     required = (
         set(range(len(spec.requested_segments())))
         if spec
@@ -233,7 +250,11 @@ def _slim(item: RankedFlight, spec: SearchSpec | None = None) -> dict[str, Any]:
     return {
         "result_id": _result_id(item),
         "request_id": item.request_id,
-        "route": [f"{leg.origin}-{leg.destination}" for leg in option.legs],
+        "route": [
+            f"{segment.origin}-{segment.destination}"
+            for segment in identity_segments
+        ]
+        or [f"{leg.origin}-{leg.destination}" for leg in option.legs],
         "price": option.price,
         "currency": option.currency,
         "duration_minutes": option.duration_minutes,
@@ -246,6 +267,14 @@ def _slim(item: RankedFlight, spec: SearchSpec | None = None) -> dict[str, Any]:
             )
         ),
         "departure_at": option.legs[0].departure_at.isoformat(),
+        "arrival_at": option.legs[-1].arrival_at.isoformat(),
+        "journeys": journeys,
+        "destination_stay_minutes": _destination_stay_minutes(option),
+        "overnight_journey_indexes": [
+            journey["journey_index"]
+            for journey in journeys
+            if journey["departure_at"][:10] != journey["arrival_at"][:10]
+        ],
         "ticket_scope": option.ticket_scope,
         "result_scope": option.result_scope,
         "price_provenance": option.price_provenance,
@@ -261,6 +290,65 @@ def _slim(item: RankedFlight, spec: SearchSpec | None = None) -> dict[str, Any]:
             spec.return_date.isoformat() if spec and spec.return_date else None
         ),
     }
+
+
+def _journey_windows(option: Any) -> list[dict[str, Any]]:
+    identity_segments = _identity_segments(option)
+    windows = []
+    for journey_index in sorted({leg.journey_index for leg in option.legs}):
+        legs = [leg for leg in option.legs if leg.journey_index == journey_index]
+        windows.append(
+            {
+                "journey_index": journey_index,
+                "origin": legs[0].origin,
+                "destination": legs[-1].destination,
+                "departure_at": legs[0].departure_at.isoformat(),
+                "arrival_at": legs[-1].arrival_at.isoformat(),
+                "segment_identity": (
+                    "provider_segments"
+                    if any(
+                        segment.journey_index == journey_index
+                        for segment in identity_segments
+                    )
+                    else "schedule_only"
+                ),
+            }
+        )
+    return windows
+
+
+def _identity_segments(option: Any) -> list[Any]:
+    if option.identity_segments:
+        return option.identity_segments
+    if not option.source_url:
+        return []
+    from agentic_flights.providers.parsing import _parse_booking_segment_identities
+
+    return _parse_booking_segment_identities(option.source_url)
+
+
+def _destination_stay_minutes(option: Any) -> int | None:
+    grouped = {
+        index: [leg for leg in option.legs if leg.journey_index == index]
+        for index in sorted({leg.journey_index for leg in option.legs})
+    }
+    if len(grouped) < 2 or 0 not in grouped or 1 not in grouped:
+        return None
+    delta = grouped[1][0].departure_at - grouped[0][-1].arrival_at
+    return max(0, int(delta.total_seconds() // 60))
+
+
+def _departure_inconvenience_minutes(option: Any) -> int:
+    """Measure how far journey departures fall outside 06:00 through 22:59."""
+    penalty = 0
+    for journey in _journey_windows(option):
+        departure = datetime.fromisoformat(journey["departure_at"])
+        minute = departure.hour * 60 + departure.minute
+        if minute < 6 * 60:
+            penalty += 6 * 60 - minute
+        elif minute >= 23 * 60:
+            penalty += minute - 23 * 60 + 1
+    return penalty
 
 
 def _coverage_complete(outcome: Any) -> bool:

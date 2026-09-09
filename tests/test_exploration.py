@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from conftest import make_option, make_spec
 
-from agentic_flights.models import BaggageAllowance, BaggageStatus, SearchCoverage
+from agentic_flights.models import BaggageAllowance, BaggageStatus, FlightLeg, SearchCoverage
 from agentic_flights.provider import (
     ProviderError,
     _BudgetExhausted,
@@ -51,6 +51,69 @@ def test_bounded_tree_ranks_a_non_first_complete_quote_first() -> None:
     assert coverage.branches_attempted == 4
     assert coverage.quotes_completed == 4
     assert coverage.fully_explored is True
+
+
+def test_connecting_preference_uses_end_to_end_journey_times() -> None:
+    target = make_option(100, stops=1)
+    target.legs = [
+        FlightLeg(
+            journey_index=0,
+            airline_name="Iberia",
+            flight_number=number,
+            origin=origin,
+            destination=destination,
+            departure_at=departure,
+            arrival_at=arrival,
+            duration_minutes=int((arrival - departure).total_seconds() // 60),
+        )
+        for origin, destination, number, departure, arrival in [
+            (
+                "MAD",
+                "WAW",
+                "3010",
+                datetime(2026, 11, 10, 8),
+                datetime(2026, 11, 10, 10),
+            ),
+            (
+                "WAW",
+                "TBS",
+                "3011",
+                datetime(2026, 11, 10, 11),
+                datetime(2026, 11, 10, 13),
+            ),
+        ]
+    ]
+    spec = make_spec(
+        "preferred",
+        date(2026, 11, 10),
+        destination="TBS",
+        max_complete_quotes=1,
+        preferred_outbound=target.model_dump(mode="json"),
+    )
+    wrong = (
+        "From 100 euros total. 1 stop flight with Iberia. Leaves Madrid Airport at "
+        "9:00 AM on Tuesday, November 10 and arrives at Tbilisi Airport at 2:00 PM on "
+        "Tuesday, November 10. Total duration 5 hr."
+    )
+    matching = (
+        "From 100 euros total. 1 stop flight with Iberia. Leaves Madrid Airport at "
+        "8:00 AM on Tuesday, November 10 and arrives at Tbilisi Airport at 1:00 PM on "
+        "Tuesday, November 10. Total duration 5 hr."
+    )
+    selected = []
+
+    async def discover(prefix):
+        return [wrong, matching]
+
+    async def finalize(prefix):
+        selected.append(prefix[0])
+        return make_option(100)
+
+    asyncio.run(
+        _run_bounded_exploration(spec, 1, SearchCoverage(), discover, finalize)
+    )
+
+    assert selected == [matching]
 
 
 def test_partial_errors_duplicates_and_later_baggage_match_are_preserved() -> None:

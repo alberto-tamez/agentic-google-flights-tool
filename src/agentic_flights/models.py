@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
 
-SCHEMA_VERSION = "7"
+SCHEMA_VERSION = "8"
 
 
 class Cabin(StrEnum):
@@ -239,6 +239,19 @@ class FlightLeg(BaseModel):
     duration_minutes: PositiveInt
 
 
+class FlightSegmentIdentity(BaseModel):
+    """Provider-stable fields that identify a selected operating segment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    journey_index: int = Field(ge=0)
+    origin: str
+    destination: str
+    departure_date: date
+    airline_code: str | None = None
+    flight_number: str | None = None
+
+
 class BaggageAllowance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -267,6 +280,7 @@ class FlightOption(BaseModel):
     booking_provider: str | None = None
     fare_name: str | None = None
     source_url: str | None = None
+    identity_segments: list[FlightSegmentIdentity] = Field(default_factory=list)
     legs: list[FlightLeg] = Field(min_length=1)
 
 
@@ -294,6 +308,7 @@ class SearchCoverage(BaseModel):
         "retrieval_limit",
         "load_error",
         "transition_budget",
+        "initial_page",
     ] = "not_applicable"
     source_truncated: bool = False
     candidates_seen: int = Field(default=0, ge=0)

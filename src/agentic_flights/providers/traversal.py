@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from asyncio import CancelledError
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -17,6 +18,7 @@ from agentic_flights.providers.base import (
     ProviderError,
     ProviderResult,
 )
+from agentic_flights.providers.budget import note_request
 from agentic_flights.providers.parsing import (
     _baggage_meets_requirement,
     _choice_identity,
@@ -36,6 +38,7 @@ def _consume_transition(coverage: SearchCoverage, spec: SearchSpec) -> None:
         coverage.budget_exhausted = True
         raise _BudgetExhausted
     coverage.browser_transitions += 1
+    note_request()
 
 
 def _search_fingerprint(spec: SearchSpec) -> str:
@@ -137,17 +140,15 @@ async def _run_bounded_exploration(
                             return True
 
                         def identity(flight):
-                            return [
-                                (
-                                    leg.origin,
-                                    leg.destination,
-                                    leg.departure_at,
-                                    leg.arrival_at,
-                                    leg.airline_name,
-                                )
-                                for leg in flight.legs
-                                if leg.journey_index == 0
+                            legs = [
+                                leg for leg in flight.legs if leg.journey_index == 0
                             ]
+                            return (
+                                legs[0].origin,
+                                legs[-1].destination,
+                                legs[0].departure_at,
+                                legs[-1].arrival_at,
+                            )
 
                         return identity(candidate) != identity(target)
 
@@ -161,6 +162,18 @@ async def _run_bounded_exploration(
                     deferred.append(prefix)
                     if coverage.source_load_stop_reason == "load_error":
                         failed_paths.add(json.dumps(prefix))
+        except CancelledError:
+            pending.insert(0, prefix)
+            pending.extend(deferred)
+            coverage.budget_exhausted = True
+            coverage.pending_branches = len(pending)
+            coverage.continuation = _continuation(
+                spec, "tree", pending=pending, expanded=expanded,
+                failed_paths=sorted(failed_paths),
+                options=[option.model_dump(mode="json") for option in options],
+                retrieval_limit=spec.retrieval_limit, load_more_clicks=spec.load_more_clicks,
+            )
+            raise
         except _BudgetExhausted:
             pending.insert(0, prefix)
             coverage.budget_exhausted = True

@@ -2,6 +2,7 @@ import json
 import urllib.parse
 from datetime import date
 
+import pytest
 from conftest import make_spec
 
 from agentic_flights.models import SearchCoverage
@@ -90,21 +91,81 @@ def test_direct_provider_normalizes_a_google_row() -> None:
     assert result.options[0].legs[0].flight_number == "3170"
 
 
-def test_smart_provider_falls_back_and_accounts_for_both_requests(monkeypatch) -> None:
+def test_smart_discovery_does_not_launch_a_browser_after_http_failure(monkeypatch) -> None:
     from agentic_flights.providers import browser, direct
 
     class FailedDirect:
         def search(self, spec):
-            raise ProviderError("direct", "unavailable", requests_made=1)
+            raise ProviderError("direct_provider_error", "unavailable", requests_made=1)
 
-    class WorkingBrowser:
-        def search(self, spec):
-            return ProviderResult("empty", [], 2, SearchCoverage(fully_explored=True))
+    class UnexpectedBrowser:
+        def __init__(self):
+            raise AssertionError("discovery must stay HTTP-only")
 
     monkeypatch.setattr(direct, "DirectProvider", FailedDirect)
-    monkeypatch.setattr(browser, "BrowserProvider", WorkingBrowser)
-    result = SmartProvider().search(
-        make_spec("smart", date(2027, 1, 2), search_mode="discover")
-    )
-    assert result.status == "empty"
-    assert result.requests_made == 3
+    monkeypatch.setattr(browser, "BrowserProvider", UnexpectedBrowser)
+    with pytest.raises(ProviderError) as caught:
+        SmartProvider().search(make_spec("smart", date(2027, 1, 2), search_mode="discover"))
+    assert caught.value.code == "direct_provider_error"
+    assert caught.value.requests_made == 1
+
+
+def test_smart_reuses_browser_across_queries_and_closes_after_direct_switch(monkeypatch):
+    from agentic_flights.providers import browser, direct
+
+    instances = []
+
+    class WorkingDirect:
+        def search(self, spec):
+            return ProviderResult("empty", [], 1, SearchCoverage(fully_explored=True))
+
+    class TrackedBrowser:
+        def __init__(self):
+            self.searches = 0
+            self.closed = 0
+            instances.append(self)
+
+        def search(self, spec):
+            self.searches += 1
+            return ProviderResult("empty", [], 1, SearchCoverage(fully_explored=True))
+
+        def close(self):
+            self.closed += 1
+
+    monkeypatch.setattr(direct, "DirectProvider", WorkingDirect)
+    monkeypatch.setattr(browser, "BrowserProvider", TrackedBrowser)
+    provider = SmartProvider()
+    spec = make_spec("reuse", date(2027, 1, 2))
+    provider.search(spec)
+    provider.search(spec)
+    provider.search(spec.model_copy(update={"search_mode": "discover"}))
+    provider.close()
+    assert len(instances) == 1
+    assert instances[0].searches == 2
+    assert instances[0].closed == 1
+
+
+def test_smart_stops_browser_verification_after_access_block(monkeypatch):
+    from agentic_flights.providers import browser
+
+    requests = []
+
+    class BlockedBrowser:
+        def search(self, spec):
+            requests.append("browser")
+            raise ProviderError(
+                "provider_access_blocked",
+                "unusual traffic",
+                requests_made=1,
+                coverage=SearchCoverage(blocked=True),
+            )
+
+    monkeypatch.setattr(browser, "BrowserProvider", BlockedBrowser)
+    provider = SmartProvider()
+    spec = make_spec("block", date(2027, 1, 2), search_mode="verify")
+    for index in range(3):
+        with pytest.raises(ProviderError) as caught:
+            provider.search(spec)
+        assert caught.value.requests_made == (1 if index == 0 else 0)
+        assert caught.value.coverage.blocked
+    assert requests == ["browser"]
