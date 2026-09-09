@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from enum import StrEnum
 from itertools import product
 from typing import Any, Literal
@@ -47,6 +47,14 @@ class AirportAccess(BaseModel):
     def validate_airport(cls, value: str) -> str:
         return SearchSpec.validate_airport(value.strip())
 
+    @model_validator(mode="after")
+    def validate_estimate(self) -> AirportAccess:
+        if (self.estimated_cost is None) != (self.estimated_minutes is None):
+            raise ValueError("provide both estimated_cost and estimated_minutes, or neither")
+        if self.access_mode == "ground" and self.estimated_cost is None:
+            raise ValueError("ground access requires estimated cost and time")
+        return self
+
 
 class StrategyHypothesis(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -55,6 +63,7 @@ class StrategyHypothesis(BaseModel):
     strategy_id: str
     risk: StrategyRisk
     searches: list[dict[str, Any]] = Field(min_length=1)
+    component_roles: list[str] = Field(min_length=1)
     true_origin: str
     true_destination: str
     ticketed_origin: str
@@ -63,7 +72,15 @@ class StrategyHypothesis(BaseModel):
     access_minutes: int | None = Field(default=None, ge=0)
     minimum_buffer_minutes: int = Field(default=0, ge=0)
     separate_tickets: bool = False
+    access_priced_by_search: bool = False
+    buffer_nights: int = Field(default=0, ge=0)
     caveats: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_components(self) -> StrategyHypothesis:
+        if len(self.searches) != len(self.component_roles):
+            raise ValueError("component_roles must align with searches")
+        return self
 
 
 class RouteEdge(BaseModel):
@@ -372,18 +389,35 @@ def build_strategy_plan(
             )
         )
     for index, access in enumerate(gateways):
+        main = base.model_copy(update={"origin": access.airport})
+        access_priced_by_search = (
+            access.access_mode == "separate_flight"
+            and access.estimated_cost is None
+            and access.estimated_minutes is None
+        )
+        searches = [main]
+        roles = ["main_ticket"]
+        buffer_nights = 0
+        if access_priced_by_search:
+            searches.append(_positioning_ticket(base, access.airport))
+            roles.append("positioning_ticket")
+            buffer_nights = 2 if base.return_date is not None else 1
         hypotheses.append(
             _hypothesis(
                 f"positioning-origin-{index}",
                 "positioning_gateway",
                 StrategyRisk.SEPARATE_TICKET,
-                [base.model_copy(update={"origin": access.airport})],
+                searches,
                 base,
                 access=access,
-                separate_tickets=access.access_mode == "separate_flight",
+                component_roles=roles,
+                separate_tickets=True,
+                access_priced_by_search=access_priced_by_search,
+                buffer_nights=buffer_nights,
                 caveats=[
                     "Add the positioning journey in both directions before comparing totals.",
                     "Use a disruption buffer; the main airline may not protect a separate feeder.",
+                    "Conservative positioning dates can add hotel nights.",
                 ],
             )
         )
@@ -417,6 +451,7 @@ def build_strategy_plan(
                 StrategyRisk.STANDARD,
                 [outbound, inbound],
                 base,
+                component_roles=["outbound_ticket", "return_ticket"],
                 separate_tickets=True,
                 caveats=["Compare the sum of two verified one-way totals with the round trip."],
             )
@@ -470,6 +505,11 @@ def build_strategy_plan(
                 StrategyRisk.CONTRACT_SENSITIVE,
                 searches,
                 base,
+                component_roles=(
+                    ["hidden_city_outbound", "return_ticket"]
+                    if len(searches) == 2
+                    else ["hidden_city_outbound"]
+                ),
                 ticketed_destination=ticketed_destination,
                 separate_tickets=base.return_date is not None,
                 caveats=next(
@@ -539,7 +579,11 @@ def evaluate_strategy_results(
                 continue
             airfare = sum(option.price for option in combination if option.price is not None)
             access_cost = hypothesis["access_cost"]
-            if access_cost is None or hypothesis["access_minutes"] is None:
+            access_minutes = hypothesis["access_minutes"]
+            if hypothesis["access_priced_by_search"]:
+                access_cost = 0
+                access_minutes = 0
+            if access_cost is None or access_minutes is None:
                 gateway_probes.append(
                     {
                         "hypothesis_id": hypothesis["hypothesis_id"],
@@ -567,11 +611,12 @@ def evaluate_strategy_results(
                     "access_cost": access_cost,
                     "total_price": airfare + access_cost,
                     "flight_minutes": sum(option.duration_minutes for option in combination),
-                    "access_minutes": hypothesis["access_minutes"],
+                    "access_minutes": access_minutes,
                     "buffer_minutes": hypothesis["minimum_buffer_minutes"],
+                    "buffer_nights": hypothesis["buffer_nights"],
                     "total_minutes": (
                         sum(option.duration_minutes for option in combination)
-                        + hypothesis["access_minutes"]
+                        + access_minutes
                         + hypothesis["minimum_buffer_minutes"]
                     ),
                     "total_stops": sum(option.stops for option in combination),
@@ -588,6 +633,16 @@ def evaluate_strategy_results(
                     "result_ids": [
                         _result_id(RankedFlight(request_id=str(index), option=option))
                         for (index, _), option in zip(mapped, combination, strict=True)
+                    ],
+                    "components": [
+                        {
+                            "role": role,
+                            "price": option.price,
+                            "currency": option.currency,
+                        }
+                        for role, option in zip(
+                            hypothesis["component_roles"], combination, strict=True
+                        )
                     ],
                     "caveats": hypothesis["caveats"],
                 }
@@ -660,8 +715,11 @@ def _hypothesis(
     base: SearchSpec,
     *,
     access: AirportAccess | None = None,
+    component_roles: list[str] | None = None,
     ticketed_destination: str | None = None,
     separate_tickets: bool = False,
+    access_priced_by_search: bool = False,
+    buffer_nights: int = 0,
     caveats: list[str] | None = None,
 ) -> StrategyHypothesis:
     return StrategyHypothesis(
@@ -669,6 +727,7 @@ def _hypothesis(
         strategy_id=strategy_id,
         risk=risk,
         searches=[_agent_search(search) for search in searches],
+        component_roles=component_roles or ["main_ticket"] * len(searches),
         true_origin=base.origin,
         true_destination=base.destination,
         ticketed_origin=searches[0].origin,
@@ -677,7 +736,25 @@ def _hypothesis(
         access_minutes=access.estimated_minutes if access else 0,
         minimum_buffer_minutes=access.minimum_buffer_minutes if access else 0,
         separate_tickets=separate_tickets,
+        access_priced_by_search=access_priced_by_search,
+        buffer_nights=buffer_nights,
         caveats=caveats or [],
+    )
+
+
+def _positioning_ticket(base: SearchSpec, gateway: str) -> SearchSpec:
+    return base.model_copy(
+        update={
+            "origin": base.origin,
+            "destination": gateway,
+            "departure_date": base.departure_date - timedelta(days=1),
+            "return_date": (
+                base.return_date + timedelta(days=1) if base.return_date is not None else None
+            ),
+            "additional_segments": [],
+            "segment_filters": SegmentFilters(),
+            "return_segment_filters": SegmentFilters(),
+        }
     )
 
 

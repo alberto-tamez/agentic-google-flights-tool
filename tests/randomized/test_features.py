@@ -331,12 +331,8 @@ def test_agent_interfaces_expose_focused_guidance(interface):
     origin=st.sampled_from(AIRPORTS),
     destination=st.sampled_from(AIRPORTS),
     gateway=st.sampled_from(AIRPORTS),
-    access_cost=st.integers(0, 500),
-    access_minutes=st.integers(0, 600),
 )
-def test_strategy_plans_preserve_route_access_and_safe_defaults(
-    origin, destination, gateway, access_cost, access_minutes
-):
+def test_strategy_plans_preserve_route_access_and_safe_defaults(origin, destination, gateway):
     assume(len({origin, destination, gateway}) == 3)
     plan = build_strategy_plan(
         {
@@ -348,14 +344,14 @@ def test_strategy_plans_preserve_route_access_and_safe_defaults(
             "language": "en-US",
             "country": "ES",
         },
-        positioning_origins=[
-            {
-                "airport": gateway,
-                "access_mode": "separate_flight",
-                "estimated_cost": access_cost,
-                "estimated_minutes": access_minutes,
-            }
-        ],
+        route_graph={
+            "source": "randomized test graph",
+            "observed_at": "2026-09-09",
+            "routes": [
+                {"origin": origin, "destination": gateway},
+                {"origin": gateway, "destination": destination},
+            ],
+        },
     )
     positioned = next(
         item for item in plan["hypotheses"] if item["strategy_id"] == "positioning_gateway"
@@ -364,8 +360,11 @@ def test_strategy_plans_preserve_route_access_and_safe_defaults(
     assert positioned["true_origin"] == origin
     assert positioned["true_destination"] == destination
     assert positioned["ticketed_origin"] == gateway
-    assert positioned["access_cost"] == access_cost
-    assert positioned["access_minutes"] == access_minutes
+    assert positioned["access_cost"] is None
+    assert positioned["access_minutes"] is None
+    assert positioned["access_priced_by_search"] is True
+    assert positioned["searches"][1]["origin"] == origin
+    assert positioned["searches"][1]["destination"] == gateway
     assert all(item["risk"] != "contract_sensitive" for item in plan["hypotheses"])
 
 

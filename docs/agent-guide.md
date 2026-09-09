@@ -72,9 +72,11 @@ hassle. Do not use one fixed savings threshold; compare the saving with the adde
 Call `playbook` when route construction could materially change the result. Pass the
 base trip and a current route graph to `start_strategy_plan`; it derives and executes
 unranked hypotheses for nearby airports, positioning gateways, mixed one-way tickets,
-and any explicitly enabled contract-sensitive strategy. `strategy_results` reports
-the direct frontier and gateway feeder-cost headroom. Candidate discovery uses graph
-connectivity, never a permanent or city-specific hub list.
+and any explicitly enabled contract-sensitive strategy. For graph-derived gateways,
+the sweep prices the main ticket and a conservative positioning ticket dated one day
+outside each end of the main trip. `strategy_results` sums those observed fares but
+keeps the separate-ticket, hotel, and connection caveats. Candidate discovery uses
+graph connectivity, never a permanent or city-specific hub list.
 
 For positioning, add both access journeys, fares, buffers, baggage handling, possible
 hotels, and separate-ticket disruption risk. Hidden-city searches never run by default.

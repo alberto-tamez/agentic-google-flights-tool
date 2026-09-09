@@ -36,9 +36,10 @@ conditions still need current sources.
 
 The gateway algorithm starts from the finite set of airports directly reachable from
 the true origin. It retains gateway G when the route graph can reach the true destination
-from G within the configured number of flight legs. It then prices G to the destination
-and reports the maximum feeder cost that could still beat the direct fare. Only gateways
-with positive price headroom need feeder and connection testing.
+from G within the configured number of flight legs. The bounded sweep prices both the
+main ticket and a conservative positioning ticket. For a round trip, the positioning
+ticket reaches G the day before and leaves G the day after the main ticket. This avoids
+pretending an unverified same-day connection is safe, but it can add two hotel nights.
 
 ## Positioning gateways
 
@@ -50,8 +51,9 @@ entry rules, hotels, and disruption buffers can erase a headline saving.
 
 For example, a route graph may show a Mexican origin connected to a leisure gateway
 that also reaches Madrid. The program discovers that topology for any airport codes; it
-does not contain a Cancun or Mexico rule. A lower gateway fare is only a probe until the
-feeder is priced and the complete door-to-door result is feasible.
+does not contain a Cancun or Mexico rule. The result combines the observed main and
+positioning fares, labels them as separate tickets, and keeps schedule feasibility and
+hotel cost as unresolved until verified.
 
 ## Hidden-city final legs
 
@@ -75,6 +77,6 @@ option with the same confidence or operational safety as a conventional itinerar
 The current engine can derive and execute direct, nearby-airport, positioning-gateway,
 mixed one-way, and opt-in hidden-city hypotheses from a route graph. A comprehensive
 automatic sweep still needs a maintained route-graph source plus current sources for
-feeder schedules, fifth-freedom routes, ground
+exact connection feasibility, fifth-freedom routes, ground
 transport, award inventory, and airline-specific contract rules. Missing source data
 must be reported as missing coverage, not silently replaced with a fixed airport list.

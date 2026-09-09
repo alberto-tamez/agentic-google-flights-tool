@@ -33,9 +33,10 @@ before the first search and update it if it is older. Use `agentic_flights.Agent
   gateways from actual connectivity rather than city-specific rules. Explicit airport
   candidates are only for ground access or manual overrides. Do not invent a universal
   gateway list or assume that a historically cheap hub is still cheap.
-- Read `strategy_results()` after the bounded sweep. A gateway probe is promising only
-  when `maximum_access_cost_to_beat_direct` is positive. Price and validate the feeder
-  before presenting it as an alternative.
+- Read `strategy_results()` after the bounded sweep. Route-graph gateways include a
+  conservatively dated positioning ticket and the main ticket. Treat the summed fare as
+  an observed separate-ticket composite until both tickets and connection logistics are
+  verified. Never present an entry from `gateway_probes` as a complete alternative.
 
 ## Choose a practical trip
 

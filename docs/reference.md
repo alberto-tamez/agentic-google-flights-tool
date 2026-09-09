@@ -86,9 +86,12 @@ status. `api.strategy_plan()` accepts a normal trip dictionary and a current rou
 It derives gateways from graph reachability and beyond destinations from outgoing routes;
 explicit airport candidates remain available for ground access and overrides.
 `start_strategy_plan()` executes the bounded component searches, while
-`strategy_results()` returns the direct Pareto frontier and gateway price probes. A
-probe's `maximum_access_cost_to_beat_direct` is the feeder-cost headroom, not a complete
-trip price. Access cost and time remain separate for door-to-door comparison.
+`strategy_results()` returns the direct and separate-ticket Pareto frontiers. A
+graph-derived gateway includes a main round trip plus a positioning round trip dated one
+day before and after it. Their summed observed fare is not a protected through-ticket;
+hotel cost and exact connection feasibility remain separate. `gateway_probes` contains
+only legacy or manually incomplete access estimates and is not a complete trip price.
+Access cost and time remain separate for door-to-door comparison.
 Contract-sensitive hypotheses require an explicit flag; hidden-city generation also
 requires carry-on-only confirmation.
 

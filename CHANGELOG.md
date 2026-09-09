@@ -8,8 +8,8 @@
   mixed one-way tickets, and explicit hidden-city candidates.
 - Derive positioning gateways and opt-in beyond destinations from a supplied route
   graph for any city pair, without hard-coded hub lists or city-specific rules.
-- Execute strategy sweeps in bounded batches and surface the feeder-cost headroom that
-  would let a gateway beat the observed direct fare.
+- Execute strategy sweeps in bounded batches and automatically price conservatively
+  dated positioning and main tickets for every graph-derived gateway.
 - Keep gateway access cost, access time, and disruption buffers separate so agents can
   compare door-to-door value without a hidden composite score.
 - Require carry-on-only travel and a separate return search before producing a

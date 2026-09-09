@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from agentic_flights import (
     AgentAPI,
     BatchExecutor,
@@ -26,6 +28,21 @@ def test_strategy_catalog_has_unique_ids_and_safe_defaults() -> None:
         for strategy in strategies
         if strategy.risk in {StrategyRisk.CONTRACT_SENSITIVE, StrategyRisk.UNSUPPORTED}
     )
+
+
+def test_ground_access_requires_a_complete_estimate() -> None:
+    with pytest.raises(ValueError, match="ground access requires"):
+        build_strategy_plan(
+            {
+                "origin": "MAD",
+                "destination": "LHR",
+                "departure_date": "2027-01-14",
+                "currency": "EUR",
+                "language": "en-US",
+                "country": "ES",
+            },
+            nearby_origins=[{"airport": "VLC", "access_mode": "ground"}],
+        )
 
 
 def test_default_playbook_excludes_contract_sensitive_and_unsupported_tactics() -> None:
@@ -115,6 +132,12 @@ def test_route_graph_finds_positioning_gateways_without_city_rules() -> None:
 
     assert [item["ticketed_origin"] for item in gateways] == ["CUN"]
     assert gateways[0]["access_cost"] is None
+    assert gateways[0]["access_priced_by_search"] is True
+    assert gateways[0]["component_roles"] == ["main_ticket", "positioning_ticket"]
+    assert gateways[0]["searches"][1]["origin"] == "MEX"
+    assert gateways[0]["searches"][1]["destination"] == "CUN"
+    assert gateways[0]["searches"][1]["departure_date"] == "2027-01-13"
+    assert gateways[0]["searches"][1]["return_date"] == "2027-01-22"
     assert plan["route_graph"] == {
         "source": "test schedule",
         "observed_at": "2026-09-09",
@@ -173,7 +196,15 @@ def test_route_graph_search_is_generic() -> None:
 def test_automatic_strategy_sweep_surfaces_gateway_price_headroom(tmp_path) -> None:
     class Provider:
         def search(self, spec):
-            price = 85 if spec.origin == "CUN" else 355 if spec.return_date else 220
+            price = (
+                85
+                if (spec.origin, spec.destination) == ("CUN", "MAD")
+                else 80
+                if (spec.origin, spec.destination) == ("MEX", "CUN")
+                else 355
+                if spec.return_date
+                else 220
+            )
             option = FlightOption(
                 provider_rank=1,
                 price=price,
@@ -223,13 +254,20 @@ def test_automatic_strategy_sweep_surfaces_gateway_price_headroom(tmp_path) -> N
         work_chunk=10,
     )
     results = api.strategy_results(run["run_id"])
-    probe = results["gateway_probes"][0]
+    gateway = next(
+        item for item in results["frontier"] if item["strategy_id"] == "positioning_gateway"
+    )
 
     assert run["progress"]["coverage_complete"] is True
-    assert probe["main_ticket_price"] == 85
-    assert probe["direct_price_baseline"] == 355
-    assert probe["maximum_access_cost_to_beat_direct"] == 270
-    assert probe["price_opportunity"] is True
+    assert gateway["airfare"] == 165
+    assert gateway["total_price"] == 165
+    assert gateway["ticket_count"] == 2
+    assert gateway["buffer_nights"] == 2
+    assert gateway["components"] == [
+        {"role": "main_ticket", "price": 85, "currency": "EUR"},
+        {"role": "positioning_ticket", "price": 80, "currency": "EUR"},
+    ]
+    assert results["gateway_probes"] == []
     assert results["hidden_weights"] is False
 
 
