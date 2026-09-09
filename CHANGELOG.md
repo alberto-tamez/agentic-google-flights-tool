@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.8
+
+- Stop verification exploration after every selected itinerary has a matching complete
+  quote, while preserving unused provider branches in the saved diagnostic record.
+- Bound verification calls to three quote attempts and twelve browser transitions by
+  default. Callers can override either limit or pass `None` for an unbounded chunk.
+- Prioritize the selected schedule at every journey, including the return, so a
+  whole-itinerary check does not search unrelated return branches first.
+- Return an unranked Pareto frontier with explicit tradeoff strengths instead of a
+  hidden composite score or an implied objective best option.
+- Give every issue stable top-level code, message, and retryability fields, including
+  incomplete coverage where the nested query error is null.
+- Report saved continuation and exhausted work budgets as explicit issues instead of
+  returning an empty issue list for unfinished work.
+- Keep run IDs, result IDs, continuation state, branch counts, and provider diagnostics
+  out of user-facing progress and recommendations unless the user requests them.
+- Require the bundled agent skill to check for a compatible installed runtime before
+  searching.
+
 ## 0.6.7
 
 - Preserve connection-level carrier and flight-number identity from Google booking

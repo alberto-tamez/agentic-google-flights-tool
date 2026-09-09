@@ -116,6 +116,71 @@ def test_connecting_preference_uses_end_to_end_journey_times() -> None:
     assert selected == [matching]
 
 
+def test_whole_itinerary_preference_prioritizes_the_selected_return() -> None:
+    target = make_option(226, stops=2).model_copy(update={"result_scope": "complete_itinerary"})
+    target.legs = [
+        FlightLeg(
+            journey_index=0,
+            airline_name="Lufthansa",
+            origin="VLC",
+            destination="TBS",
+            departure_at=datetime(2026, 11, 20, 18, 15),
+            arrival_at=datetime(2026, 11, 21, 5, 10),
+            duration_minutes=475,
+        ),
+        FlightLeg(
+            journey_index=1,
+            airline_name="Lufthansa",
+            origin="TBS",
+            destination="VLC",
+            departure_at=datetime(2026, 11, 23, 6, 15),
+            arrival_at=datetime(2026, 11, 23, 11),
+            duration_minutes=465,
+        ),
+    ]
+    spec = make_spec(
+        "whole",
+        date(2026, 11, 20),
+        origin="VLC",
+        destination="TBS",
+        return_date=date(2026, 11, 23),
+        max_complete_quotes=1,
+        preferred_outbound=target.model_dump(mode="json"),
+    )
+    outbound = (
+        "From 226 euros round trip total. 1 stop flight with Lufthansa. Leaves Valencia "
+        "Airport at 6:15 PM on Friday, November 20 and arrives at Tbilisi Airport at "
+        "5:10 AM on Saturday, November 21. Total duration 7 hr 55 min."
+    )
+    wrong_return = (
+        "From 226 euros round trip total. 1 stop flight with Lufthansa. Leaves Tbilisi "
+        "Airport at 6:15 AM on Monday, November 23 and arrives at Valencia Airport at "
+        "5:30 PM on Tuesday, November 24. Total duration 38 hr 15 min."
+    )
+    matching_return = (
+        "From 226 euros round trip total. 1 stop flight with Lufthansa. Leaves Tbilisi "
+        "Airport at 6:15 AM on Monday, November 23 and arrives at Valencia Airport at "
+        "11:00 AM on Monday, November 23. Total duration 7 hr 45 min."
+    )
+    selected = []
+
+    async def discover(prefix):
+        return [outbound] if not prefix else [wrong_return, matching_return]
+
+    async def finalize(prefix):
+        selected.append(prefix)
+        return target.model_copy(
+            update={
+                "ticket_scope": "complete_single_ticket",
+                "price_provenance": "provider_final_total",
+            }
+        )
+
+    asyncio.run(_run_bounded_exploration(spec, 2, SearchCoverage(), discover, finalize))
+
+    assert selected == [[outbound, matching_return]]
+
+
 def test_partial_errors_duplicates_and_later_baggage_match_are_preserved() -> None:
     spec = _strict_bag_spec(max_complete_quotes=4)
     coverage = SearchCoverage()

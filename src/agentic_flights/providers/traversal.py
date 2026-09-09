@@ -131,18 +131,30 @@ async def _run_bounded_exploration(
                     else 0
                 )
                 fresh = fresh[offset:] + fresh[:offset]
-                if depth == 0 and spec.preferred_outbound:
+                if spec.preferred_outbound:
                     target = FlightOption.model_validate(spec.preferred_outbound)
+                    target_legs = [
+                        leg for leg in target.legs if leg.journey_index == depth
+                    ]
 
-                    def preference(label, target=target):
-                        candidate = _parse_browser_label(label, spec, 1)
+                    def preference(label, target_legs=target_legs, depth=depth):
+                        if not target_legs:
+                            return True
+                        segment = spec.requested_segments()[depth]
+                        segment_spec = spec.model_copy(
+                            update={
+                                "origin": segment.origin,
+                                "destination": segment.destination,
+                                "departure_date": segment.departure_date,
+                                "return_date": None,
+                                "additional_segments": [],
+                            }
+                        )
+                        candidate = _parse_browser_label(label, segment_spec, 1)
                         if candidate is None:
                             return True
 
-                        def identity(flight):
-                            legs = [
-                                leg for leg in flight.legs if leg.journey_index == 0
-                            ]
+                        def identity(legs):
                             return (
                                 legs[0].origin,
                                 legs[-1].destination,
@@ -150,7 +162,7 @@ async def _run_bounded_exploration(
                                 legs[-1].arrival_at,
                             )
 
-                        return identity(candidate) != identity(target)
+                        return identity(candidate.legs) != identity(target_legs)
 
                     fresh.sort(key=preference)
                 n = spec.candidates_per_stage

@@ -67,6 +67,7 @@ class Progress(BaseModel):
     coverage_complete: bool
     can_continue: bool
     can_retry: bool
+    verification_satisfied: bool | None = None
 
 
 class ToolResponse(BaseModel):
@@ -79,6 +80,7 @@ class ToolResponse(BaseModel):
     error: ToolError | None = None
     next_actions: list[NextAction] | None = None
     verification: list[VerificationMatch] | None = None
+    verification_satisfied: bool | None = None
 
 
 def _handler(method):
@@ -133,7 +135,10 @@ def create_server(api: AgentAPI | None = None):
         "Agentic Flights",
         instructions=(
             "Use start for exact trips and plan for flexible date or airport searches. Continue "
-            "saved runs with explore. Compare before inspecting or verifying selected results."
+            "saved runs with explore. Compare before inspecting or verifying selected results. "
+            "Stop a verification run when verification_satisfied is true. Treat run IDs, result "
+            "IDs, continuations, and provider diagnostics as private agent state; do not include "
+            "them in user-facing recommendations unless the user requests diagnostics."
         ),
     )
     for name in (

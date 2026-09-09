@@ -189,15 +189,23 @@ class AgentAPI:
         complete = not remaining and bool(report.outcomes) and all(
             _coverage_complete(o) for o in report.outcomes
         )
+        matches = self._verification_matches(report).get("verification", [])
+        verification_active = "verification_targets" in state
+        verification_satisfied = bool(matches) and all(
+            match["status"] == "matched_observed_itinerary" for match in matches
+        )
+        if verification_satisfied:
+            can_continue = False
         actions = []
         if can_continue:
             actions.append({"operation": "explore", "arguments": {"run_id": run_id}})
-        if failed or blocked or (not complete and not can_continue):
+        if not verification_satisfied and (
+            failed or blocked or (not complete and not can_continue)
+        ):
             actions.append({"operation": "issues", "arguments": {"run_id": run_id}})
-        matches = self._verification_matches(report).get("verification", [])
         ids = list(dict.fromkeys(i for m in matches for i in m["matching_result_ids"]))
         evidence_status = None
-        if "verification_targets" in state:
+        if verification_active:
             status_counts: dict[str, int] = {}
             for match in matches:
                 status_counts[match["status"]] = status_counts.get(match["status"], 0) + 1
@@ -216,6 +224,7 @@ class AgentAPI:
                 "matched_complete_quotes": len(matched_ids),
                 "other_complete_quotes": len(complete_ids - matched_ids),
                 "coverage_complete": complete,
+                "verification_satisfied": verification_satisfied,
                 "claim_scope": (
                     "matched_selected_itineraries_only"
                     if matched_ids
@@ -251,22 +260,30 @@ class AgentAPI:
                     "reason": "Matched verification quotes",
                 }
             )
-        currencies = sorted({v.currency for o in report.outcomes for v in o.options})
-        for currency in currencies:
-            actions.append(
-                {
-                    "operation": "compare",
-                    "arguments": {"run_id": run_id, "filters": {"currency": currency}},
-                }
-            )
+        if not verification_satisfied:
+            currencies = sorted({v.currency for o in report.outcomes for v in o.options})
+            for currency in currencies:
+                actions.append(
+                    {
+                        "operation": "compare",
+                        "arguments": {"run_id": run_id, "filters": {"currency": currency}},
+                    }
+                )
         return {
             **payload,
             **({"verification": matches} if "verification_targets" in state else {}),
             **({"evidence_status": evidence_status} if evidence_status is not None else {}),
+            **(
+                {"verification_satisfied": verification_satisfied}
+                if verification_active
+                else {}
+            ),
             "run_id": run_id,
             "progress": {
                 "phase": "verification" if "verification_targets" in state else "exploration",
-                "state": "ready"
+                "state": "selection_matched"
+                if verification_satisfied
+                else "ready"
                 if not report.outcomes and remaining
                 else "in_progress"
                 if can_continue
@@ -282,8 +299,13 @@ class AgentAPI:
                 "failed_queries": failed,
                 "coverage_complete": complete,
                 "can_continue": can_continue,
-                "can_retry": bool(
+                "can_retry": not verification_satisfied and bool(
                     blocked or any(o.error and o.error.retryable for o in report.outcomes)
+                ),
+                **(
+                    {"verification_satisfied": verification_satisfied}
+                    if verification_active
+                    else {}
                 ),
             },
             "next_actions": actions,
@@ -534,12 +556,60 @@ class AgentAPI:
                 bv.append(-b_stay)
             return all(x <= y for x, y in zip(av, bv, strict=True)) and av != bv
 
-        ids = [
-            _result_id(item)
+        frontier = [
+            item
             for item in items
             if not any(dominates(other.option, item.option) for other in items)
         ]
+        ids = [_result_id(item) for item in frontier]
         selected = ids[offset : offset + page_size]
+        indexed = {_result_id(item): item for item in frontier}
+
+        def tradeoff_labels(item):
+            option = item.option
+            comparable = [
+                candidate.option
+                for candidate in frontier
+                if (
+                    candidate.option.ticket_scope,
+                    candidate.option.result_scope,
+                    candidate.option.price_provenance,
+                    candidate.option.currency,
+                )
+                == (
+                    option.ticket_scope,
+                    option.result_scope,
+                    option.price_provenance,
+                    option.currency,
+                )
+            ]
+            labels = []
+            prices = [candidate.price for candidate in comparable if candidate.price is not None]
+            if option.price is not None and prices and option.price == min(prices):
+                labels.append("lowest_price")
+            if option.duration_minutes == min(
+                candidate.duration_minutes for candidate in comparable
+            ):
+                labels.append("shortest_travel_time")
+            if option.stops == min(candidate.stops for candidate in comparable):
+                labels.append("fewest_stops")
+            if _departure_inconvenience_minutes(option) == min(
+                _departure_inconvenience_minutes(candidate) for candidate in comparable
+            ):
+                labels.append("least_departure_inconvenience")
+            stays = [
+                stay
+                for candidate in comparable
+                if (stay := _destination_stay_minutes(candidate)) is not None
+            ]
+            if (
+                stays
+                and (stay := _destination_stay_minutes(option)) is not None
+                and stay == max(stays)
+            ):
+                labels.append("most_destination_time")
+            return labels
+
         next_cursor = (
             _encode_cursor(checksum, filter_hash, offset + len(selected))
             if offset + len(selected) < len(ids)
@@ -551,10 +621,29 @@ class AgentAPI:
             {
                 "run_id": run_id,
                 "result_ids": selected,
+                "alternatives": [
+                    {
+                        "result_id": result_id,
+                        "strengths": tradeoff_labels(indexed[result_id]),
+                        "evidence_level": (
+                            "provider_final_total"
+                            if indexed[result_id].option.ticket_scope == "complete_single_ticket"
+                            and indexed[result_id].option.price_provenance
+                            == "provider_final_total"
+                            else "observed_price"
+                        ),
+                    }
+                    for result_id in selected
+                ],
                 "total_alternatives": len(ids),
                 "next_cursor": next_cursor,
                 "evaluated": len(items),
-                "meaning": "Tradeoffs grouped by comparable ticket scope and currency",
+                "decision_policy": "unranked_pareto_frontier",
+                "hidden_weights": False,
+                "meaning": (
+                    "Strictly dominated options removed within comparable evidence and currency; "
+                    "remaining options are tradeoffs, not a best-to-worst ranking"
+                ),
                 "tradeoff_dimensions": [
                     "price",
                     "travel_duration",
@@ -601,11 +690,54 @@ class AgentAPI:
                 or c.branch_errors
                 or c.source_parse_failures
                 or c.source_truncated
+                or c.budget_exhausted
+                or c.continuation
             ):
                 spec = outcome.search_spec
+                codes = []
+                if outcome.error:
+                    codes.append(outcome.error.code)
+                if c.blocked:
+                    codes.append("blocked")
+                codes.extend(c.branch_errors_by_code)
+                if c.source_parse_failures:
+                    codes.append("source_parse_failure")
+                if c.source_truncated:
+                    codes.append("source_truncated")
+                if c.budget_exhausted:
+                    codes.append("work_budget_reached")
+                if c.continuation and not c.blocked:
+                    codes.append("continuation_pending")
+                codes = list(dict.fromkeys(codes))
+                primary = codes[0]
+                message = (
+                    outcome.error.message
+                    if outcome.error
+                    else c.branch_error_samples[0].message
+                    if c.branch_error_samples
+                    else "The provider stopped before this search was fully explored."
+                    if c.blocked
+                    else "Google returned only part of the available result set."
+                    if c.source_truncated
+                    else "This work chunk reached its limit before the search finished."
+                    if c.budget_exhausted
+                    else "The search has saved work that can be continued."
+                    if c.continuation
+                    else "Some provider results could not be parsed."
+                )
                 issues.append(
                     {
                         "request_id": outcome.request_id,
+                        "code": primary,
+                        "codes": codes,
+                        "message": message,
+                        "retryable": bool(
+                            (outcome.error and outcome.error.retryable)
+                            or c.blocked
+                            or c.budget_exhausted
+                            or c.continuation
+                            or any(error.retryable for error in c.branch_error_samples)
+                        ),
                         "query": spec.model_dump(
                             mode="json", exclude={"continuation", "preferred_outbound"}
                         )
@@ -652,7 +784,8 @@ class AgentAPI:
         run_id: str,
         result_ids: list[str],
         require_bag: bool = False,
-        work_quotes: int | None = None,
+        work_quotes: int | None = 3,
+        max_browser_transitions: int | None = 12,
     ) -> dict[str, Any]:
         """Fetch fresh final quotes; report whether each selected observed itinerary matched."""
         result_ids = list(dict.fromkeys(result_ids))
@@ -670,6 +803,7 @@ class AgentAPI:
                 "search_mode": "verify",
                 "continuation": None,
                 "max_complete_quotes": work_quotes,
+                "max_browser_transitions": max_browser_transitions,
                 "preferred_outbound": item["option"],
             }
             if require_bag:

@@ -17,9 +17,12 @@ Install its reusable skill for the AI app you are using:
 
 Use the installed Agentic Flights skill to find the best flights for my trip.
 Explore flexible dates, nearby airports, and trip lengths when they
-could improve the result. Show options that balance price and travel time. Check
-the current total price and baggage rules for the best options. Tell me if any part
-of the search was incomplete. Do not book anything.
+could improve the result. Include airports that are realistically reachable by train
+or bus when the full door-to-door saving justifies the extra time. Show options that
+balance total price, travel time, and comfort. Check the current total price and baggage
+rules for the best options. Briefly mention close alternatives instead of hiding them.
+Tell me if any part of the search was incomplete. Keep internal run IDs and tool
+diagnostics out of the answer. Do not book anything.
 
 Trip: [origin, destination, dates or flexibility, trip length, travelers,
 currency, baggage, stop limits, and timing or airline preferences].
@@ -72,6 +75,8 @@ agentic-flights-mcp
 Large CLI searches return resumable work chunks. Progress and checkpoint run IDs
 appear on stderr; the final JSON includes `batch_progress` and a `resume_command`.
 Completed queries survive interruption. Run `agentic-flights resume RUN_ID` to continue.
+These handles are for agents and diagnostics; they should not appear in a travel
+recommendation unless the user asks for technical details.
 
 Agents can pass an exact search directly with `AgentAPI.start({...})`; no temporary
 request file is needed. Discovery stays HTTP-only. A headless browser starts only

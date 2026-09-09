@@ -190,7 +190,10 @@ def test_partial_never_dominates_complete(tmp_path):
         }
     )
     run = save(api, [partial, complete])
-    assert len(api.alternatives(run)["result_ids"]) == 2
+    alternatives = api.alternatives(run)
+    assert len(alternatives["result_ids"]) == 2
+    assert alternatives["decision_policy"] == "unranked_pareto_frontier"
+    assert alternatives["hidden_weights"] is False
     page = api.compare(run)
     assert page["results"][0]["ticket_scope"] == "complete_single_ticket"
     assert page["results"][1]["result_scope"] == "outbound_choice"
@@ -508,6 +511,8 @@ def test_alternatives_keep_a_later_return_with_more_destination_time(tmp_path):
     listed = api.compare(run, {"currency": "EUR"}, page_size=2)["results"]
 
     assert alternatives["total_alternatives"] == 2
+    strengths = {label for item in alternatives["alternatives"] for label in item["strengths"]}
+    assert {"lowest_price", "shortest_travel_time", "most_destination_time"} <= strengths
     assert {item["journeys"][1]["departure_at"][11:16] for item in listed} == {
         "04:40",
         "08:40",
@@ -530,9 +535,107 @@ def test_errors_are_inspectable_without_full_dump(tmp_path):
     )
     run = api.explore(api.plan(space.model_dump(mode="json"))["run_id"])
     issues = api.issues(run["run_id"])
+    assert issues["issues"][0]["code"] == "internal_error"
+    assert issues["issues"][0]["codes"] == ["internal_error"]
+    assert issues["issues"][0]["retryable"] is False
     assert issues["issues"][0]["error"]["message"] == "test provider failure"
     assert issues["progress"]["state"] == "needs_attention"
     assert issues["issues"][0]["query"]["origin"] == "MAD"
+
+
+def test_incomplete_coverage_has_a_flat_issue_code_without_an_error(tmp_path):
+    class Partial:
+        def search(self, spec):
+            return ProviderResult(
+                "success",
+                [make_option()],
+                1,
+                SearchCoverage(source_truncated=True, source_load_stop_reason="initial_page"),
+            )
+
+    api = make_api(tmp_path, Partial)
+    run = api.start(
+        {
+            "origin": "MAD",
+            "destination": "BCN",
+            "departure_date": DAY.isoformat(),
+            "currency": "EUR",
+            "language": "en-US",
+            "country": "ES",
+        }
+    )
+    issue = api.issues(run["run_id"])["issues"][0]
+    assert issue["code"] == "source_truncated"
+    assert issue["error"] is None
+    assert issue["message"] == "Google returned only part of the available result set."
+
+
+def test_pending_work_budget_is_an_explicit_issue(tmp_path):
+    class Pending:
+        def search(self, spec):
+            return ProviderResult(
+                "success",
+                [make_option()],
+                3,
+                SearchCoverage(
+                    budget_exhausted=True,
+                    continuation={"next": True},
+                    pending_branches=4,
+                ),
+            )
+
+    api = make_api(tmp_path, Pending)
+    run = api.start(
+        {
+            "origin": "MAD",
+            "destination": "BCN",
+            "departure_date": DAY.isoformat(),
+            "currency": "EUR",
+            "language": "en-US",
+            "country": "ES",
+        }
+    )
+    issue = api.issues(run["run_id"])["issues"][0]
+    assert issue["code"] == "work_budget_reached"
+    assert issue["codes"] == ["work_budget_reached", "continuation_pending"]
+    assert issue["retryable"] is True
+
+
+def test_matching_verification_stops_exploring_unrelated_quote_branches(tmp_path):
+    target = make_option(100)
+    quote = target.model_copy(
+        deep=True,
+        update={
+            "ticket_scope": "complete_single_ticket",
+            "price_provenance": "provider_final_total",
+        },
+    )
+
+    class MatchedWithMoreBranches:
+        def search(self, spec):
+            return ProviderResult(
+                "success",
+                [quote],
+                3,
+                SearchCoverage(
+                    continuation={"more": True},
+                    pending_branches=12,
+                    budget_exhausted=True,
+                ),
+            )
+
+    api = make_api(tmp_path, MatchedWithMoreBranches)
+    original = save(api, [target])
+    selected = api.compare(original)["results"][0]["result_id"]
+    verified = api.verify(original, [selected])
+
+    assert verified["verification_satisfied"] is True
+    assert verified["progress"]["state"] == "selection_matched"
+    assert verified["progress"]["can_continue"] is False
+    assert verified["progress"]["can_retry"] is False
+    assert not any(action["operation"] == "explore" for action in verified["next_actions"])
+    assert not any(action["operation"] == "compare" for action in verified["next_actions"])
+    assert any(action["operation"] == "inspect" for action in verified["next_actions"])
 
 
 def test_executable_next_actions_keep_filters_and_cursors(tmp_path):

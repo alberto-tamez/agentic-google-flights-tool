@@ -21,6 +21,16 @@ def test_bundled_skill_uses_declared_cli_commands() -> None:
     assert project_commands <= declared_commands
 
 
+def test_bundled_skill_keeps_agent_handles_out_of_user_answers() -> None:
+    project_root = Path(__file__).parents[1]
+    skill_text = (project_root / "skill/agentic-flights/SKILL.md").read_text(encoding="utf-8")
+
+    assert "Treat run IDs, result IDs, request IDs" in skill_text
+    assert "Never include" in skill_text
+    assert "unless the user asks for diagnostics" in skill_text
+    assert "verification_satisfied" in skill_text
+
+
 def test_project_skill_installs_for_both_harnesses(tmp_path: Path) -> None:
     result = install_skill(project_dir=tmp_path)
 

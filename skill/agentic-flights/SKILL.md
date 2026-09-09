@@ -6,8 +6,8 @@ license: MIT
 
 # Agentic Flights
 
-Use Python 3.11+ and the installed `agentic_flights.AgentAPI`. Keep full reports behind their
-`rgf_...` run IDs and return only useful comparisons.
+Use Python 3.11+ and agentic-flights 0.6.8 or newer. Check the installed version once
+before the first search and update it if it is older. Use `agentic_flights.AgentAPI`.
 
 ## Search
 
@@ -22,16 +22,50 @@ Use Python 3.11+ and the installed `agentic_flights.AgentAPI`. Keep full reports
   `start()` supplies the request ID and discovery mode when omitted.
 - Continue the returned run while `progress.can_continue`, unless the user's goal
   is already met. A work chunk limits one call, not the whole search. Read
-  `issues()` after errors; retry only after the input, authorization, or environment
-  changed.
+  `issues()` after errors and use each issue's top-level `code`, `message`, and
+  `retryable` fields. Retry only after the input, authorization, or environment changed.
 - Use `compare()` with an explicit currency, then `alternatives()` and `inspect()`
   only for promising result IDs.
 - `alternatives()` keeps useful time tradeoffs, including later returns that add
   destination time. Compare the per-journey departure and arrival fields.
 
+## Choose a practical trip
+
+- Apply the user's hard constraints first, then use `alternatives()` to remove options
+  that are strictly worse across comparable price, time, stops, departure convenience,
+  and destination time. Its remaining options are an unranked Pareto frontier. Never
+  turn their order into a hidden score or claim an objective best.
+- Use the returned strengths to label the tradeoffs, such as lowest price, shortest
+  travel time, easiest departure, or most destination time. Recommend one only from
+  the user's stated priorities. Without a stated priority, present a small tradeoff set
+  and make any personal call explicit instead of disguising it as algorithmic fact.
+- Prefer the shorter, easier itinerary when the user says fares are close. Recommend
+  extra connections, an overnight, or more ground travel only when the savings are
+  meaningful for this user and trip. Do not use a fixed savings threshold.
+- Check plausible nearby departure and arrival airports unless the user wants a
+  specific airport. Include an airport reached by train, bus, or car only after
+  accounting for the ground fare, travel time in both directions, transfer buffer,
+  and the risk of separate tickets. Do not treat a lower airfare as a saving if the
+  ground trip consumes it.
+- Compare total door-to-door time, not flight duration alone. Count early departures,
+  overnight travel, long layovers, self-transfers, airport changes, extra hotel nights,
+  baggage friction, and how much useful time remains at the destination.
+- Always check for a meaningfully faster, easier, or cheaper alternative. Show it when
+  it gives the user a real choice. State the extra time or hassle alongside the saving,
+  and do not pad the answer with full writeups of near-duplicates. Briefly mention close
+  alternatives instead of hiding them, especially when they change the airport,
+  departure time, arrival time, connection, baggage, or comfort. Give the price and
+  practical difference in one line unless the user asks for more detail.
+- Verify current ground schedules and prices when they could change the recommendation.
+  Label estimates instead of presenting them as confirmed connections.
+
 ## Verify and report
 
 Use `verify()` on shortlisted IDs for current total price and cabin-bag evidence.
+Stop advancing that verification run when `verification_satisfied` is true. Inspect
+its matching quote instead of exhausting unrelated branches. If `match_scope` is
+`outbound`, verify the resulting complete itinerary once more before claiming the
+round trip matched.
 Only `complete_single_ticket` plus `provider_final_total` confirms a ticket total.
 Never sum one-way fares or substitute an unmatched flight. An outbound match does
 not confirm the selected return; check `whole_itinerary_matched` and
@@ -42,13 +76,24 @@ confirm the selected flight.
 Report price, dates, airports, duration, stops, baggage evidence, freshness, and
 incomplete coverage. Do not claim a global minimum or book.
 
+## Keep internal state private
+
+- Treat run IDs, result IDs, request IDs, cursors, continuation data, branch counts,
+  provider error codes, and `next_actions` as private working state. Never include
+  them in progress updates or the final answer unless the user asks for diagnostics.
+- Tell the user what matters to the decision: what was found, what is being checked,
+  and whether a price is verified, recently observed, or could not be reconfirmed.
+  Do not narrate commands, saved runs, parser behavior, or terminal states.
+- Prefer short prose or a small, valid Markdown table. Do not expose raw tool output.
+
 ## Side effects and failures
 
 Discovery uses HTTP and must not launch a browser. Verification may launch
 Playwright's isolated Chromium headless shell; it does not use the user's browser.
 Use the harness's normal authorization prompt only when needed. Never switch to a
 visible browser, sign in, book, or submit traveler
-or payment data. Keep retry narration out of chat unless it changes the result.
+or payment data. Do not call handled timeouts or blocked checks successful. Keep
+retry narration out of chat unless it changes the decision.
 Failed or blocked rows are errors, not flight results.
 
 Use `agentic-flights guide <topic>` only for an unfamiliar schema or recovery path.

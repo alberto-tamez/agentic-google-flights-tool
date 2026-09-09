@@ -61,7 +61,7 @@ if not ids:
     print("No matching observed options", page["progress"])
 else:
     # Choose according to the user's preferences; this example verifies the page.
-    verified = api.verify(run_id, ids, require_bag=True, work_quotes=1)
+    verified = api.verify(run_id, ids, require_bag=True)
     while verified["progress"]["can_continue"]:
         verified = api.explore(verified["run_id"])
     matched_ids = list(dict.fromkeys(
@@ -114,9 +114,14 @@ Planner acceptance checks input shape; it does not prove live flight availabilit
 
 Every data operation returns `run_id`, `progress`, and executable `next_actions`
 with operation names and real arguments. `progress.can_continue` is consistent
-for exploration and verification. `coverage_complete` distinguishes exhausted
+for exploration and verification. A verification run stops advertising continuation
+once every selected itinerary has a matching complete quote, even when unrelated
+provider branches remain. `verification_satisfied` records that stopping condition.
+`coverage_complete` distinguishes exhausted
 query attempts from trustworthy source coverage. Use `issues` for errors,
-retryability, affected queries, and incomplete-source details. Empty selections
+retryability, affected queries, and incomplete-source details. Each issue exposes
+top-level `code`, `codes`, `message`, and `retryable` fields. Its nested `error` may
+be null when the issue is incomplete coverage rather than a failed query. Empty selections
 are valid no-ops. Duplicate selections are deduplicated.
 
 MCP responses additionally contain `ok`. When false, `error.code`, `message`,
@@ -173,7 +178,9 @@ safely by the thread executor. Configure built-in query time limits with
 
 SearchSpec's `retrieval_limit`, `load_more_clicks`, `candidates_per_stage`,
 `max_complete_quotes`, and `max_browser_transitions` have no configured limit when
-unset. Finite values schedule resumable work. Returned `coverage.continuation`
+unset. `verify()` defaults to three quote attempts and twelve browser transitions per
+selected itinerary. Pass `None` explicitly for an unbounded verification chunk.
+Finite values schedule resumable work. Returned `coverage.continuation`
 retains unfinished branches and quote evidence. Feed it back with the same query
 when using BatchExecutor directly; AgentAPI/Exploration do this for you.
 `max_results` is retained for input compatibility; saved-result views paginate the
@@ -193,7 +200,9 @@ Mixed-currency price sorting/filtering without a currency raises an explicit err
 Sort keys are `price`, `duration`, `stops`, and `departure`. Filtering happens before
 pagination; pass the returned cursor with the same filters. `alternatives` retains
 price, duration, stop, departure-time, and destination-time compromises within the
-same ticket and price scope. Slim results expose per-journey times,
+same ticket and price scope. It returns an unranked Pareto frontier with no hidden
+weights and labels each option's strengths. Transport order is not a best-to-worst
+ranking. Slim results expose per-journey times,
 `destination_stay_minutes`, and `overnight_journey_indexes`. Partial
 outbound observations cannot dominate complete tickets. Both `compare` and
 `alternatives` paginate; follow their returned cursor or executable next action.
