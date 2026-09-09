@@ -28,6 +28,14 @@ before the first search and update it if it is older. Use `agentic_flights.Agent
   only for promising result IDs.
 - `alternatives()` keeps useful time tradeoffs, including later returns that add
   destination time. Compare the per-journey departure and arrival fields.
+- Call `playbook()` when routing or ticket construction could materially change the
+  result. Use `start_strategy_plan()` with a current route graph so the program derives
+  gateways from actual connectivity rather than city-specific rules. Explicit airport
+  candidates are only for ground access or manual overrides. Do not invent a universal
+  gateway list or assume that a historically cheap hub is still cheap.
+- Read `strategy_results()` after the bounded sweep. A gateway probe is promising only
+  when `maximum_access_cost_to_beat_direct` is positive. Price and validate the feeder
+  before presenting it as an alternative.
 
 ## Choose a practical trip
 
@@ -58,6 +66,12 @@ before the first search and update it if it is older. Use `agentic_flights.Agent
   practical difference in one line unless the user asks for more detail.
 - Verify current ground schedules and prices when they could change the recommendation.
   Label estimates instead of presenting them as confirmed connections.
+- Add positioning fares, ground costs, travel time in both directions, disruption
+  buffers, baggage recheck, and any hotel before calling a gateway option cheaper.
+- Keep contract-sensitive strategies off unless the user explicitly opts in. Hidden-city
+  evaluation additionally requires carry-on-only travel, a final skipped segment, a
+  separate return reservation, and a current review of the airline's terms. Present it
+  as contract-sensitive and operationally fragile, never as an ordinary itinerary.
 
 ## Verify and report
 

@@ -81,6 +81,17 @@ batches. A provider implements `search(SearchSpec) -> ProviderResult` and may ex
 Use `api.schema("verify")` or another operation name for its inputs and description;
 no class or source inspection is needed. `schema("operations")` lists all operations.
 
+`api.playbook()` returns the strategy catalog with risk, requirements, and default
+status. `api.strategy_plan()` accepts a normal trip dictionary and a current route graph.
+It derives gateways from graph reachability and beyond destinations from outgoing routes;
+explicit airport candidates remain available for ground access and overrides.
+`start_strategy_plan()` executes the bounded component searches, while
+`strategy_results()` returns the direct Pareto frontier and gateway price probes. A
+probe's `maximum_access_cost_to_beat_direct` is the feeder-cost headroom, not a complete
+trip price. Access cost and time remain separate for door-to-door comparison.
+Contract-sensitive hypotheses require an explicit flag; hidden-city generation also
+requires carry-on-only confirmation.
+
 For an exact trip, call the API without a request file:
 
 ```python

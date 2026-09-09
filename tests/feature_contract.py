@@ -5,4 +5,5 @@ FEATURES = {
     "saved-comparison": "Saved progress and comparison",
     "price-baggage": "Price and baggage checking",
     "agent-interfaces": "Python API, CLI, MCP, and Codex/Claude skills",
+    "routing-strategies": "Gateway, ticket-construction, and risk-aware search plans",
 }

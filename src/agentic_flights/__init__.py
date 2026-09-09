@@ -18,6 +18,17 @@ from agentic_flights.models import (
     SearchSpec,
     SegmentFilters,
 )
+from agentic_flights.playbook import (
+    AirportAccess,
+    FlightStrategy,
+    RouteEdge,
+    RouteGraph,
+    StrategyHypothesis,
+    StrategyRisk,
+    build_strategy_plan,
+    evaluate_strategy_results,
+    list_strategies,
+)
 
 __all__ = [
     "AgentAPI",
@@ -42,4 +53,13 @@ __all__ = [
     "ShortlistReport",
     "ShortlistSpec",
     "build_shortlist",
+    "FlightStrategy",
+    "RouteEdge",
+    "RouteGraph",
+    "StrategyRisk",
+    "list_strategies",
+    "AirportAccess",
+    "StrategyHypothesis",
+    "build_strategy_plan",
+    "evaluate_strategy_results",
 ]

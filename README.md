@@ -54,6 +54,9 @@ skill unless you pass `--force`.
   different city or to a different airport.
 - Explore nearby airports, dates, and stay lengths; filter by price, stops, airline,
   connection, layover, time, duration, emissions, and baggage.
+- Derive and test unranked positioning gateways from a current route graph, alongside
+  nearby arrival airports, mixed one-way tickets, and explicitly enabled
+  contract-sensitive searches.
 - Search for adults, children, and infants, including lap infants.
 - Compare price against travel time, departure hour, and time at the destination
   without mixing different currencies.
@@ -95,6 +98,7 @@ cannot prove that Google showed every fare. Confirm the price, baggage, and seat
 with the seller. The tool does not book travel.
 
 [Agent guide](docs/agent-guide.md) · [Technical reference](docs/reference.md) ·
+[Strategy playbook](docs/strategy-playbook.md) ·
 [PyPI](https://pypi.org/project/agentic-flights/) ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
 [Third-party notices](THIRD_PARTY_NOTICES.md)

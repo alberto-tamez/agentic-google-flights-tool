@@ -325,6 +325,10 @@ class AgentAPI:
             "inspect",
             "verify",
             "issues",
+            "playbook",
+            "strategy_plan",
+            "start_strategy_plan",
+            "strategy_results",
         )
         if topic in operations:
             method = getattr(self, topic)
@@ -350,10 +354,151 @@ class AgentAPI:
                 "verify": "selected IDs -> fresh quotes and itinerary matches",
                 "alternatives": "run_id, filters -> tradeoffs within comparable ticket scopes",
                 "issues": "run_id -> paginated errors and incomplete coverage",
+                "playbook": "available search strategies with explicit risk and requirements",
+                "strategy_plan": "trip and candidate airports -> unranked search hypotheses",
+                "start_strategy_plan": "build and execute bounded strategy hypotheses",
+                "strategy_results": "saved strategy run -> door-to-door Pareto frontier",
             },
             "schema_topics": [*schemas, *operations],
             "response_contract": "Data responses include run_id, progress, next_actions",
             "stopping": "work_chunk_complete means continue, not best flight found",
+        }
+
+    def playbook(
+        self,
+        include_contract_sensitive: bool = False,
+        include_unsupported: bool = False,
+    ) -> dict[str, Any]:
+        """List flight-search strategies without silently enabling risky tactics."""
+        from agentic_flights.playbook import list_strategies
+
+        strategies = list_strategies(
+            include_contract_sensitive=include_contract_sensitive,
+            include_unsupported=include_unsupported,
+        )
+        return {
+            "strategies": [strategy.model_dump(mode="json") for strategy in strategies],
+            "default_strategy_ids": [
+                strategy.strategy_id for strategy in strategies if strategy.default_enabled
+            ],
+            "contract_sensitive_included": include_contract_sensitive,
+            "unsupported_included": include_unsupported,
+            "policy": (
+                "Contract-sensitive strategies require explicit user opt-in and "
+                "current terms review."
+            ),
+        }
+
+    def strategy_plan(
+        self,
+        trip: dict[str, Any],
+        nearby_origins: list[dict[str, Any]] | None = None,
+        positioning_origins: list[dict[str, Any]] | None = None,
+        nearby_destinations: list[dict[str, Any]] | None = None,
+        hidden_city_destinations: list[str] | None = None,
+        route_graph: dict[str, Any] | None = None,
+        auto_positioning: bool = True,
+        auto_hidden_city: bool = False,
+        max_gateway_main_legs: int = 2,
+        allow_contract_sensitive: bool = False,
+        carry_on_only: bool = False,
+    ) -> dict[str, Any]:
+        """Build unranked route hypotheses from explicit airport candidates."""
+        from agentic_flights.playbook import build_strategy_plan
+
+        return build_strategy_plan(
+            trip,
+            nearby_origins=nearby_origins,
+            positioning_origins=positioning_origins,
+            nearby_destinations=nearby_destinations,
+            hidden_city_destinations=hidden_city_destinations,
+            route_graph=route_graph,
+            auto_positioning=auto_positioning,
+            auto_hidden_city=auto_hidden_city,
+            max_gateway_main_legs=max_gateway_main_legs,
+            allow_contract_sensitive=allow_contract_sensitive,
+            carry_on_only=carry_on_only,
+        )
+
+    def start_strategy_plan(
+        self,
+        trip: dict[str, Any],
+        nearby_origins: list[dict[str, Any]] | None = None,
+        positioning_origins: list[dict[str, Any]] | None = None,
+        nearby_destinations: list[dict[str, Any]] | None = None,
+        hidden_city_destinations: list[str] | None = None,
+        route_graph: dict[str, Any] | None = None,
+        auto_positioning: bool = True,
+        auto_hidden_city: bool = False,
+        max_gateway_main_legs: int = 2,
+        allow_contract_sensitive: bool = False,
+        carry_on_only: bool = False,
+        work_chunk: int = 8,
+        chunk_seconds: float = 20,
+    ) -> dict[str, Any]:
+        """Build and start a bounded strategy sweep from explicit airport candidates."""
+        plan = self.strategy_plan(
+            trip,
+            nearby_origins=nearby_origins,
+            positioning_origins=positioning_origins,
+            nearby_destinations=nearby_destinations,
+            hidden_city_destinations=hidden_city_destinations,
+            route_graph=route_graph,
+            auto_positioning=auto_positioning,
+            auto_hidden_city=auto_hidden_city,
+            max_gateway_main_legs=max_gateway_main_legs,
+            allow_contract_sensitive=allow_contract_sensitive,
+            carry_on_only=carry_on_only,
+        )
+        searches = []
+        request_map = {}
+        for hypothesis in plan["hypotheses"]:
+            for component_index, search in enumerate(hypothesis["searches"]):
+                request_id = str(len(searches))
+                searches.append(search)
+                request_map[request_id] = {
+                    "hypothesis_id": hypothesis["hypothesis_id"],
+                    "component_index": component_index,
+                }
+        started = self.start(searches, work_chunk=work_chunk, chunk_seconds=chunk_seconds)
+        report, _, _ = self._load(started["run_id"])
+        report.exploration_state = {
+            **(report.exploration_state or {}),
+            "strategy_plan": plan,
+            "strategy_request_map": request_map,
+        }
+        response = self._save(report)
+        return {
+            **response,
+            "strategy_progress": {
+                "hypotheses": len(plan["hypotheses"]),
+                "component_searches": len(searches),
+                "excluded": plan["excluded"],
+            },
+        }
+
+    def strategy_results(
+        self, run_id: str, max_options_per_search: int = 5
+    ) -> dict[str, Any]:
+        """Combine a saved strategy sweep into an unranked door-to-door frontier."""
+        from agentic_flights.playbook import evaluate_strategy_results
+
+        report, _, _ = self._load(run_id)
+        state = report.exploration_state or {}
+        if "strategy_plan" not in state or "strategy_request_map" not in state:
+            raise ValueError("This run does not contain a strategy plan.")
+        result = evaluate_strategy_results(
+            report,
+            state["strategy_plan"],
+            state["strategy_request_map"],
+            max_options_per_search=max_options_per_search,
+        )
+        common = self._respond(report, run_id, {})
+        return {
+            **result,
+            "run_id": run_id,
+            "progress": common["progress"],
+            "next_actions": common["next_actions"],
         }
 
     def plan(self, space: dict[str, Any]) -> dict[str, Any]:

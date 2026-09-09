@@ -5,10 +5,10 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from agentic_flights import AgentAPI, BatchExecutor, SearchSpace
+from agentic_flights import AgentAPI, BatchExecutor, SearchSpace, build_strategy_plan
 from agentic_flights.cache import FileCache
 from agentic_flights.cli import run
 from agentic_flights.filtering import ShortlistSpec, collect_matches
@@ -324,6 +324,49 @@ def test_agent_interfaces_expose_focused_guidance(interface):
             result = install_skill(interface, project_dir=Path(directory), dry_run=True)
             assert result["skills"][0]["harness"] == interface
             assert result["skills"][0]["action"] == "install"
+
+
+@pytest.mark.feature("routing-strategies")
+@given(
+    origin=st.sampled_from(AIRPORTS),
+    destination=st.sampled_from(AIRPORTS),
+    gateway=st.sampled_from(AIRPORTS),
+    access_cost=st.integers(0, 500),
+    access_minutes=st.integers(0, 600),
+)
+def test_strategy_plans_preserve_route_access_and_safe_defaults(
+    origin, destination, gateway, access_cost, access_minutes
+):
+    assume(len({origin, destination, gateway}) == 3)
+    plan = build_strategy_plan(
+        {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": "2027-06-10",
+            "return_date": "2027-06-17",
+            "currency": "EUR",
+            "language": "en-US",
+            "country": "ES",
+        },
+        positioning_origins=[
+            {
+                "airport": gateway,
+                "access_mode": "separate_flight",
+                "estimated_cost": access_cost,
+                "estimated_minutes": access_minutes,
+            }
+        ],
+    )
+    positioned = next(
+        item for item in plan["hypotheses"] if item["strategy_id"] == "positioning_gateway"
+    )
+
+    assert positioned["true_origin"] == origin
+    assert positioned["true_destination"] == destination
+    assert positioned["ticketed_origin"] == gateway
+    assert positioned["access_cost"] == access_cost
+    assert positioned["access_minutes"] == access_minutes
+    assert all(item["risk"] != "contract_sensitive" for item in plan["hypotheses"])
 
 
 def _option(spec: SearchSpec, price: int) -> FlightOption:

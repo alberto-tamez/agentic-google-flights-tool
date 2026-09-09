@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0
+
+- Add a machine-readable flight-strategy playbook with safe defaults, explicit
+  separate-ticket risk, contract-sensitive opt-in, and unsupported-provider boundaries.
+- Generate unranked search hypotheses for nearby airports, positioning gateways,
+  mixed one-way tickets, and explicit hidden-city candidates.
+- Derive positioning gateways and opt-in beyond destinations from a supplied route
+  graph for any city pair, without hard-coded hub lists or city-specific rules.
+- Execute strategy sweeps in bounded batches and surface the feeder-cost headroom that
+  would let a gateway beat the observed direct fare.
+- Keep gateway access cost, access time, and disruption buffers separate so agents can
+  compare door-to-door value without a hidden composite score.
+- Require carry-on-only travel and a separate return search before producing a
+  hidden-city hypothesis; retain operational and contract warnings beside the result.
+
 ## 0.6.8
 
 - Stop verification exploration after every selected itinerary has a matching complete

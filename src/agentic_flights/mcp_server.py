@@ -23,6 +23,10 @@ class NextAction(BaseModel):
         "inspect",
         "verify",
         "issues",
+        "playbook",
+        "strategy_plan",
+        "start_strategy_plan",
+        "strategy_results",
     ]
     arguments: dict[str, Any]
     reason: str | None = None
@@ -151,6 +155,10 @@ def create_server(api: AgentAPI | None = None):
         "inspect",
         "verify",
         "issues",
+        "playbook",
+        "strategy_plan",
+        "start_strategy_plan",
+        "strategy_results",
     ):
         server.tool(name=name)(_handler(getattr(api, name)))
     return server

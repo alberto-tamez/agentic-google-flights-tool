@@ -69,6 +69,19 @@ saving may justify extra connections, an overnight, or more ground travel, but t
 threshold depends on the user's budget, trip length, schedule, and tolerance for
 hassle. Do not use one fixed savings threshold; compare the saving with the added hours.
 
+Call `playbook` when route construction could materially change the result. Pass the
+base trip and a current route graph to `start_strategy_plan`; it derives and executes
+unranked hypotheses for nearby airports, positioning gateways, mixed one-way tickets,
+and any explicitly enabled contract-sensitive strategy. `strategy_results` reports
+the direct frontier and gateway feeder-cost headroom. Candidate discovery uses graph
+connectivity, never a permanent or city-specific hub list.
+
+For positioning, add both access journeys, fares, buffers, baggage handling, possible
+hotels, and separate-ticket disruption risk. Hidden-city searches never run by default.
+They require explicit user opt-in, carry-on-only travel, a final skipped segment, a
+separate return reservation, and current airline-terms review. Keep the risk label next
+to the price difference.
+
 Check plausible nearby airports when rail, bus, or driving makes them realistic. For
 example, a traveler in Valencia might consider Madrid or Alicante. Compare the full
 ground trip in both directions, including its fare, duration, transfer buffer, and

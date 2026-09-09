@@ -229,6 +229,10 @@ def _run_guide(argv: Sequence[str]) -> int:
             "inspect",
             "verify",
             "issues",
+            "playbook",
+            "strategy_plan",
+            "start_strategy_plan",
+            "strategy_results",
         ],
     )
     args = parser.parse_args(argv)
