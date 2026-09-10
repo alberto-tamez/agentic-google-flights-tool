@@ -16,6 +16,7 @@ class NextAction(BaseModel):
     operation: Literal[
         "schema",
         "plan",
+        "search_flexible",
         "start",
         "explore",
         "compare",
@@ -102,6 +103,7 @@ def _handler(method):
             )
             topic = {
                 "plan": "space",
+                "search_flexible": "space",
                 "start": "start",
                 "compare": "filters",
                 "alternatives": "filters",
@@ -140,8 +142,9 @@ def create_server(api: AgentAPI | None = None):
     server = MCPServer(
         "Agentic Flights",
         instructions=(
-            "Use start for exact trips and plan for flexible date or airport searches. Continue "
-            "saved runs with explore. Compare before inspecting or verifying selected results. "
+            "Use start for exact trips and search_flexible for ordinary flexible date, airport, "
+            "or stay comparisons. Use plan and explore for explicitly bounded or interruptible "
+            "work. After comparing, check alternatives, then verify only selected results. "
             "Stop a verification run when verification_satisfied is true. Treat run IDs, result "
             "IDs, continuations, and provider diagnostics as private agent state; do not include "
             "them in user-facing recommendations unless the user requests diagnostics."
@@ -150,6 +153,7 @@ def create_server(api: AgentAPI | None = None):
     for name in (
         "schema",
         "plan",
+        "search_flexible",
         "start",
         "explore",
         "compare",

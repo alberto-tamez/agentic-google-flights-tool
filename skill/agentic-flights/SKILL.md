@@ -6,7 +6,7 @@ license: MIT
 
 # Agentic Flights
 
-Use Python 3.11+ and agentic-flights 0.6.8 or newer. Check the installed version once
+Use Python 3.11+ and agentic-flights 0.7.1 or newer. Check the installed version once
 before the first search and update it if it is older. Use `agentic_flights.AgentAPI`.
 
 ## Search
@@ -18,14 +18,19 @@ before the first search and update it if it is older. Use `agentic_flights.Agent
   agent-driven call. Omit default fields and invented limits.
 - Exact trips use `AgentAPI.start(search)`; pass a list only for multiple searches.
   Open-jaw and multi-city trips are one search with `additional_segments`. Flexible
-  airports, dates, or trip lengths use `AgentAPI.plan()` followed by `explore()`.
+  airports, dates, or trip lengths ordinarily use `AgentAPI.search_flexible()`.
+  Use `AgentAPI.plan()` followed by `explore()` only when work must be interrupted or
+  explicitly bounded.
   `start()` supplies the request ID and discovery mode when omitted.
 - Continue the returned run while `progress.can_continue`, unless the user's goal
   is already met. A work chunk limits one call, not the whole search. Read
   `issues()` after errors and use each issue's top-level `code`, `message`, and
   `retryable` fields. Retry only after the input, authorization, or environment changed.
-- Use `compare()` with an explicit currency, then `alternatives()` and `inspect()`
-  only for promising result IDs.
+- `search_flexible()` already returns the latest comparison. It uses a published
+  20-query, 20-second call budget, not a hidden search cutoff. Continue only if
+  `progress.can_continue` and the user's goal is unmet. Pass `chunk_seconds=None` only
+  with `work_chunk=None` for deliberate synchronous exhaustion. Next call `alternatives()`, choose promising
+  result IDs, and make one `verify()` call for that shortlist.
 - `alternatives()` keeps useful time tradeoffs, including later returns that add
   destination time. Compare the per-journey departure and arrival fields.
 - Call `playbook()` when routing or ticket construction could materially change the

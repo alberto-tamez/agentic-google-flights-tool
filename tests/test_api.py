@@ -15,6 +15,7 @@ from agentic_flights.models import (
     SearchOutcome,
 )
 from agentic_flights.provider import (
+    ProviderError,
     ProviderResult,
 )
 from agentic_flights.store import ManagedStore
@@ -139,6 +140,120 @@ def test_pending_queries_resume_without_resending_space(tmp_path):
     second = api.explore(first["run_id"], work_chunk=1)
     assert second["search_space_exhausted"]
     assert api.compare(second["run_id"])["results"][0]["price"] == 50
+
+
+def test_search_flexible_executes_full_space_and_preserves_incomplete_errors(tmp_path):
+    calls = []
+
+    class Provider:
+        def search(self, spec):
+            calls.append((spec.request_id, bool(spec.continuation)))
+            if spec.destination == "CDG":
+                raise ProviderError("failed", "no inventory", retryable=False, requests_made=1)
+            continued = bool(spec.continuation)
+            return ProviderResult(
+                "success",
+                [make_option(80 if continued else 100)],
+                1,
+                SearchCoverage(
+                    fully_explored=continued,
+                    continuation=None if continued else {"next": True},
+                    pending_branches=0 if continued else 1,
+                ),
+            )
+
+    api = make_api(tmp_path, Provider)
+    response = api.search_flexible(
+        {
+            "template": make_spec("t", DAY).model_dump(mode="json"),
+            "origins": ["MAD"],
+            "destinations": ["LHR", "CDG"],
+            "departure_start": DAY.isoformat(),
+            "departure_end": (DAY + timedelta(days=1)).isoformat(),
+        },
+        page_size=20,
+        prefer=["price"],
+        chunk_seconds=None,
+    )
+
+    initial = [request_id for request_id, continued in calls if not continued]
+    assert len(initial) == len(set(initial)) == 4
+    assert sum(continued for _, continued in calls) == 2
+    assert len(response["results"]) == 2
+    assert response["progress"]["failed_queries"] == 2
+    assert response["progress"]["coverage_complete"] is False
+    assert response["progress"]["can_continue"] is False
+    assert response["progress"]["state"] == "needs_attention"
+    assert response["run_id"].startswith("rgf_")
+    assert "verification" not in response
+
+
+def test_search_flexible_publishes_call_budget_and_latest_partial_snapshot(tmp_path):
+    class Provider:
+        def search(self, spec):
+            return ProviderResult(
+                "success", [make_option()], 1, SearchCoverage(fully_explored=True)
+            )
+
+    api = make_api(tmp_path, Provider)
+    space = {
+        "template": make_spec("t", DAY).model_dump(mode="json"),
+        "origins": ["MAD"],
+        "destinations": ["LHR", "CDG"],
+        "departure_start": DAY.isoformat(),
+        "departure_end": (DAY + timedelta(days=1)).isoformat(),
+    }
+    partial = api.search_flexible(space, work_chunk=1)
+
+    assert partial["progress"]["attempted_queries"] == 1
+    assert partial["progress"]["remaining_queries"] == 3
+    assert partial["workflow"] == {
+        "planned_queries": 4,
+        "query_chunk": 1,
+        "time_budget_seconds": 20,
+        "stop_reason": "call_budget_reached",
+        "can_resume": True,
+        "store": {"root": str(api.store.root), "temporary_fallback": False},
+    }
+
+    complete = api.search_flexible(space, work_chunk=1, chunk_seconds=None)
+    assert complete["progress"]["remaining_queries"] == 0
+    assert complete["workflow"]["stop_reason"] == "search_space_exhausted"
+    assert complete["workflow"]["can_resume"] is False
+
+
+def test_search_flexible_stops_if_progress_state_repeats(tmp_path, monkeypatch):
+    api = make_api(tmp_path)
+    stalled = {
+        "run_id": "rgf_0000000000000000",
+        "progress": {
+            "can_continue": True,
+            "attempted_queries": 0,
+            "remaining_queries": 1,
+            "pending_queries": 0,
+        },
+    }
+    monkeypatch.setattr(api, "plan", lambda space: stalled)
+    monkeypatch.setattr(api, "explore", lambda *args, **kwargs: stalled)
+    monkeypatch.setattr(
+        api,
+        "compare",
+        lambda *args, **kwargs: {"progress": {"can_continue": True}},
+    )
+
+    response = api.search_flexible(
+        {
+            "template": make_spec("t", DAY).model_dump(mode="json"),
+            "origins": ["MAD"],
+            "destinations": ["LHR"],
+            "departure_start": DAY.isoformat(),
+            "departure_end": DAY.isoformat(),
+        },
+        chunk_seconds=None,
+    )
+
+    assert response["workflow"]["stop_reason"] == "no_progress"
+    assert response["workflow"]["can_resume"] is True
 
 
 def test_blocked_plan_does_not_implicitly_repeat(tmp_path):

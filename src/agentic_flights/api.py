@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect as introspection
 import json
+import math
 from typing import Any, Literal, get_type_hints
 
 from pydantic import create_model
@@ -142,6 +143,7 @@ class AgentAPI:
     def __init__(self, store: ManagedStore | None = None, executor: BatchExecutor | None = None,
                  on_progress=None, route_source=None):
         self.store = store or ManagedStore()
+        self.store.initialize()
         self.on_progress = on_progress
         self.route_source = route_source
         self.executor = executor or BatchExecutor(
@@ -319,6 +321,7 @@ class AgentAPI:
             return schemas[topic].model_json_schema()
         operations = (
             "plan",
+            "search_flexible",
             "start",
             "explore",
             "compare",
@@ -350,6 +353,9 @@ class AgentAPI:
         return {
             "operations": {
                 "plan": "space -> run_id, no flight requests",
+                "search_flexible": (
+                    "space and explicit call budget -> latest flexible comparison"
+                ),
                 "start": "exact search dicts -> run_id and first bounded work chunk",
                 "explore": "run_id, work_chunk, prefer -> progress; repeat until complete",
                 "compare": "run_id, filters, page_size, cursor -> offline ranked page",
@@ -655,11 +661,83 @@ class AgentAPI:
             "next_actions": saved["next_actions"],
         }
 
+    def search_flexible(
+        self,
+        space: dict[str, Any],
+        filters: dict[str, Any] | None = None,
+        page_size: int = 20,
+        prefer: list[str] | None = None,
+        work_chunk: int | None = 20,
+        chunk_seconds: float | None = 20,
+    ) -> dict[str, Any]:
+        """Advance a finite flexible search, then compare the latest snapshot offline."""
+        parsed = SearchSpace.model_validate(space)
+        parsed_filters = ShortlistSpec.model_validate(filters or {})
+        if page_size < 1:
+            raise ValueError("page_size must be positive")
+        if work_chunk is not None and (
+            isinstance(work_chunk, bool) or not isinstance(work_chunk, int) or work_chunk < 1
+        ):
+            raise ValueError("work_chunk must be positive")
+        if chunk_seconds is not None and (
+            not math.isfinite(chunk_seconds) or chunk_seconds <= 0
+        ):
+            raise ValueError("chunk_seconds must be finite and positive")
+        query_chunk = work_chunk or parsed.count
+        latest = self.plan(parsed.model_dump(mode="json"))
+        previous_state = None
+        stop_reason = "search_space_exhausted"
+        while latest["progress"]["can_continue"]:
+            current = self.explore(
+                latest["run_id"],
+                work_chunk=query_chunk,
+                prefer=prefer,
+                retry_errors=False,
+                chunk_seconds=chunk_seconds,
+            )
+            state = (
+                current["run_id"],
+                current["progress"]["attempted_queries"],
+                current["progress"]["remaining_queries"],
+                current["progress"]["pending_queries"],
+            )
+            if state == previous_state:
+                latest = current
+                stop_reason = "no_progress"
+                break
+            latest = current
+            previous_state = state
+            stop_reason = current.get("stop_reason", stop_reason)
+            if chunk_seconds is not None:
+                stop_reason = (
+                    "call_budget_reached"
+                    if latest["progress"]["can_continue"]
+                    else current.get("stop_reason", "search_space_exhausted")
+                )
+                break
+        comparison = self.compare(
+            latest["run_id"],
+            filters=parsed_filters.model_dump(mode="json"),
+            page_size=page_size,
+        )
+        comparison["workflow"] = {
+            "planned_queries": parsed.count,
+            "query_chunk": query_chunk,
+            "time_budget_seconds": chunk_seconds,
+            "stop_reason": stop_reason,
+            "can_resume": comparison["progress"]["can_continue"],
+            "store": {
+                "root": str(self.store.root),
+                "temporary_fallback": self.store.using_fallback,
+            },
+        }
+        return comparison
+
     def start(
         self,
         searches: dict[str, Any] | list[dict[str, Any]],
         work_chunk: int = 8,
-        chunk_seconds: float = 20,
+        chunk_seconds: float | None = 20,
     ) -> dict[str, Any]:
         """Start exact one-way, round-trip, open-jaw, or multi-city searches."""
         if not isinstance(searches, (dict, list)):
@@ -694,7 +772,7 @@ class AgentAPI:
         work_chunk: int = 20,
         prefer: list[str] | None = None,
         retry_errors: bool = False,
-        chunk_seconds: float = 20,
+        chunk_seconds: float | None = 20,
     ) -> dict[str, Any]:
         """Advance a saved plan or pending verification; all state is in the handle."""
         report, _, _ = self._load(run_id)

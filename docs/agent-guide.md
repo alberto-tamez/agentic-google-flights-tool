@@ -5,7 +5,7 @@ useful alternatives with evidence. After installation, no repository checkout is
 
 ## Start
 
-Use Python 3.11+ and agentic-flights 0.6.8 or newer. Check the runtime version once
+Use Python 3.11+ and agentic-flights 0.7.1 or newer. Check the runtime version once
 before the first search so an older package cannot silently follow a newer skill.
 An installed Google Chrome or Playwright Chromium is needed only for verification. Read
 `agentic-flights guide reference` for the complete Python example. Load `agentic-flights guide space`,
@@ -25,8 +25,13 @@ Preserve children and infants separately from adults, and preserve checked bags,
 airline exclusions, connection or layover requirements, emissions preferences,
 self-transfer rules, and basic-economy exclusions when supplied.
 
-Use `AgentAPI.plan` to validate and save a `SearchSpace` without making flight
-requests. `AgentAPI.explore` accepts the saved run ID and returns a new snapshot.
+Use `AgentAPI.search_flexible` for an ordinary finite `SearchSpace`. It advances at most
+20 queries for up to 20 seconds by default, then returns an offline comparison of the
+latest resumable snapshot without verifying fares. Small searches normally finish in that call.
+If `progress.can_continue` and the user's goal is unmet, follow the returned continuation.
+Pass `work_chunk=None, chunk_seconds=None` only when synchronous exhaustion of the
+declared space is deliberate. Then call `alternatives`, choose a shortlist, and make one `verify` call.
+Use `AgentAPI.plan` plus `AgentAPI.explore` when interruption must be controlled directly.
 For an exact trip, pass one compact dictionary directly to
 `AgentAPI.start`; it assigns omitted request IDs and starts in discovery mode.
 Do not create a temporary JSON input file for an agent-driven search. The default

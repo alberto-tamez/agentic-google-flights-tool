@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import re
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,13 +32,33 @@ class StorePolicy:
 
 class ManagedStore:
     def __init__(self, root: Path | None = None, policy: StorePolicy | None = None) -> None:
-        self.root = (root or _default_root()).expanduser()
+        self._explicit_root = root is not None
+        self._using_fallback = False
+        self._set_root((root if root is not None else _default_root()).expanduser())
         self.policy = policy or StorePolicy()
+
+    def _set_root(self, root: Path) -> None:
+        self.root = root
         self.runs = self.root / "runs"
         self.provider_cache = self.root / "provider-cache"
         self.route_cache = self.root / "route-cache"
 
+    @property
+    def using_fallback(self) -> bool:
+        """Whether the implicit default root was replaced by the private temp root."""
+        return self._using_fallback
+
     def initialize(self) -> None:
+        try:
+            self._initialize_root()
+        except OSError as exc:
+            if self._explicit_root or exc.errno not in {errno.EACCES, errno.EPERM, errno.EROFS}:
+                raise
+            self._set_root(_fallback_root())
+            self._using_fallback = True
+            self._initialize_root()
+
+    def _initialize_root(self) -> None:
         if self.root.is_symlink():
             raise StoreError("unsafe_store", "managed store root cannot be a symlink")
         if self.root.exists() and not (self.root / SENTINEL).exists():
@@ -219,3 +241,9 @@ def _default_root() -> Path:
         return Path.home() / "Library" / "Caches" / "agentic-flights"
     cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     return cache_root / "agentic-flights"
+
+
+def _fallback_root() -> Path:
+    getuid = getattr(os, "getuid", None)
+    suffix = f"-{getuid()}" if callable(getuid) else ""
+    return Path(tempfile.gettempdir()) / f"agentic-flights{suffix}"

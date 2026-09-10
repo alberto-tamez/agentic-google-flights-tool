@@ -31,6 +31,11 @@ def test_mcp_in_memory_schema_and_plan(tmp_path):
             )
             result = await client.call_tool("plan", {"space": space.model_dump(mode="json")})
             assert "rgf_" in json.dumps(result.structured_content)
+            result = await client.call_tool(
+                "search_flexible", {"space": space.model_dump(mode="json")}
+            )
+            assert result.structured_content["progress"]["remaining_queries"] == 0
+            assert result.structured_content["results"]
             exact = make_spec("ignored", DAY, search_mode="discover").model_dump(
                 mode="json", exclude={"request_id", "search_mode"}
             )
@@ -97,6 +102,7 @@ def test_mcp_errors_can_be_repaired_and_schemas_are_discoverable(tmp_path):
             assert missing["error"]["code"] == "run_expired"
             schemas = (await c.call_tool("schema", {"topic": "operations"})).structured_content
             assert "start" in schemas["operations"] and "issues" in schemas["operations"]
+            assert "search_flexible" in schemas["operations"]
             assert "playbook" in schemas["operations"]
             assert "strategy_plan" in schemas["operations"]
             assert "discover_route_graph" in schemas["operations"]
@@ -111,6 +117,7 @@ def test_mcp_errors_can_be_repaired_and_schemas_are_discoverable(tmp_path):
             tools = await c.list_tools()
             tools = getattr(tools, "tools", tools)
             assert any(t.name == "start" for t in tools)
+            assert any(t.name == "search_flexible" for t in tools)
             assert any(t.name == "strategy_plan" for t in tools)
             assert any(t.name == "start_auto_strategy_plan" for t in tools)
             tool = next(t for t in tools if t.name == "inspect")

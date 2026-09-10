@@ -39,12 +39,21 @@ class SearchSpace(BaseModel):
 
     @model_validator(mode="after")
     def validate_space(self) -> SearchSpace:
-        if self.template.additional_segments or self.template.return_date is not None:
-            raise ValueError("use a one-way template; min_nights/max_nights define returns")
+        if self.template.additional_segments:
+            raise ValueError("multi-city templates are not supported")
         if self.departure_end < self.departure_start:
             raise ValueError("departure window must be ordered")
         if (self.min_nights is None) != (self.max_nights is None):
             raise ValueError("provide both min_nights and max_nights, or neither")
+        if self.template.return_date is not None:
+            template_nights = (self.template.return_date - self.template.departure_date).days
+            if self.min_nights is None:
+                self.min_nights = self.max_nights = template_nights
+            elif not self.min_nights <= template_nights <= self.max_nights:
+                raise ValueError(
+                    "template return_date is inconsistent with min_nights/max_nights"
+                )
+            self.template = self.template.model_copy(update={"return_date": None})
         if self.min_nights is not None:
             if self.min_nights > self.max_nights:
                 raise ValueError("min_nights must not exceed max_nights")

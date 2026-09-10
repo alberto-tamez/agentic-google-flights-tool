@@ -223,6 +223,7 @@ def _run_guide(argv: Sequence[str]) -> int:
             "filters",
             "operations",
             "plan",
+            "search_flexible",
             "explore",
             "compare",
             "alternatives",

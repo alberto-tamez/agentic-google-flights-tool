@@ -85,8 +85,9 @@ Completed queries survive interruption. Run `agentic-flights resume RUN_ID` to c
 These handles are for agents and diagnostics; they should not appear in a travel
 recommendation unless the user asks for technical details.
 
-Agents can pass an exact search directly with `AgentAPI.start({...})`; no temporary
-request file is needed. Discovery stays HTTP-only. A headless browser starts only
+Agents can pass an exact search directly with `AgentAPI.start({...})` and a finite flexible
+space with `AgentAPI.search_flexible({...})`; no temporary request file is needed.
+Discovery stays HTTP-only. A headless browser starts only
 when final prices or baggage are verified.
 
 Run `agentic-flights guide` for the workflow or `agentic-flights guide <operation>`
