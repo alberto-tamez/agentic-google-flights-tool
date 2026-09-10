@@ -401,9 +401,9 @@ def build_strategy_plan(
     carry_on_only: bool = False,
 ) -> dict[str, Any]:
     raw = {
+        **trip,
         "request_id": "strategy-template",
         "search_mode": "discover",
-        **trip,
         "continuation": None,
         "preferred_outbound": None,
     }

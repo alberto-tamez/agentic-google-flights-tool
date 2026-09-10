@@ -9,9 +9,86 @@ from datetime import date
 import pytest
 from conftest import make_option, make_spec
 
+from agentic_flights import AgentAPI
 from agentic_flights.cli import run
 from agentic_flights.provider import ProviderResult
 from agentic_flights.store import ManagedStore, StoreError, StorePolicy
+
+
+def test_default_store_permission_fallback_is_private_reusable_and_aligns_cache(
+    tmp_path, monkeypatch
+) -> None:
+    import agentic_flights.store as store_module
+
+    blocked = tmp_path / "blocked"
+    fallback = tmp_path / "temp" / f"agentic-flights-{os.getuid()}"
+    original = ManagedStore._initialize_root
+
+    def initialize(store):
+        if store.root == blocked:
+            raise PermissionError(errno.EACCES, "denied", blocked)
+        return original(store)
+
+    import errno
+
+    monkeypatch.setattr(store_module, "_default_root", lambda: blocked)
+    monkeypatch.setattr(store_module.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    monkeypatch.setattr(ManagedStore, "_initialize_root", initialize)
+
+    api = AgentAPI()
+    assert api.store.root == fallback
+    assert api.store.using_fallback is True
+    assert api.executor.cache.directory == fallback / "provider-cache" / "smart"
+    assert stat.S_IMODE(fallback.stat().st_mode) == 0o700
+    assert ManagedStore().initialize() is None
+
+
+def test_explicit_store_permission_failure_never_falls_back(tmp_path, monkeypatch) -> None:
+    explicit = tmp_path / "explicit"
+
+    def denied(store):
+        raise PermissionError(errno.EACCES, "denied", store.root)
+
+    import errno
+
+    monkeypatch.setattr(ManagedStore, "_initialize_root", denied)
+    store = ManagedStore(explicit)
+    with pytest.raises(PermissionError):
+        store.initialize()
+    assert store.root == explicit
+    assert store.using_fallback is False
+
+
+def test_default_store_fallback_rejects_a_symlinked_temp_root(tmp_path, monkeypatch) -> None:
+    import agentic_flights.store as store_module
+
+    blocked = tmp_path / "blocked"
+    temp = tmp_path / "temp"
+    temp.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    fallback = temp / f"agentic-flights-{os.getuid()}"
+    try:
+        fallback.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    original = ManagedStore._initialize_root
+
+    def initialize(store):
+        if store.root == blocked:
+            raise PermissionError(errno.EACCES, "denied", blocked)
+        return original(store)
+
+    import errno
+
+    monkeypatch.setattr(store_module, "_default_root", lambda: blocked)
+    monkeypatch.setattr(store_module.tempfile, "gettempdir", lambda: str(temp))
+    monkeypatch.setattr(ManagedStore, "_initialize_root", initialize)
+
+    with pytest.raises(StoreError) as error:
+        ManagedStore().initialize()
+    assert error.value.code == "unsafe_store"
+    assert list(outside.iterdir()) == []
 
 
 def test_managed_store_enforces_ttl_and_run_count_inside_owned_root(tmp_path) -> None:

@@ -49,8 +49,50 @@ def test_large_spaces_are_valid_but_multi_city_templates_are_rejected(future_dat
     large = space_for(future_date, departure_end=future_date + timedelta(days=365),
                       min_nights=0, max_nights=365)
     assert large.count > 100000
-    with pytest.raises(ValueError, match="one-way template"):
-        space_for(future_date, template=make_spec("t", future_date, return_date=future_date))
+    with pytest.raises(ValueError, match="multi-city"):
+        space_for(
+            future_date,
+            template=make_spec(
+                "t",
+                future_date,
+                additional_segments=[{
+                    "origin": "BCN", "destination": "MAD", "departure_date": future_date,
+                }],
+            ),
+        )
+
+
+def test_template_return_date_is_normalized_when_consistent(future_date):
+    space = space_for(
+        future_date,
+        template=make_spec("t", future_date, return_date=future_date + timedelta(days=8)),
+        min_nights=7,
+        max_nights=9,
+    )
+    assert space.template.return_date is None
+    assert (space.min_nights, space.max_nights) == (7, 9)
+    assert {(spec.return_date - spec.departure_date).days for spec in space.searches()} == {
+        7, 8, 9
+    }
+    for nights in (7, 9):
+        boundary = space_for(
+            future_date,
+            template=make_spec(
+                "t", future_date, return_date=future_date + timedelta(days=nights)
+            ),
+            min_nights=7,
+            max_nights=9,
+        )
+        assert boundary.template.return_date is None
+
+
+def test_template_return_date_derives_exact_stay_or_rejects_conflict(future_date):
+    template = make_spec("t", future_date, return_date=future_date + timedelta(days=8))
+    derived = space_for(future_date, template=template)
+    assert derived.template.return_date is None
+    assert (derived.min_nights, derived.max_nights) == (8, 8)
+    with pytest.raises(ValueError, match="inconsistent"):
+        space_for(future_date, template=template, min_nights=2, max_nights=7)
 
 
 def test_resume_survives_new_instances_and_preserves_failures(tmp_path, future_date):

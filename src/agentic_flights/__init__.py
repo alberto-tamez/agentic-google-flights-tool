@@ -1,3 +1,16 @@
+from agentic_flights.agent import (
+    AGENT_CONTRACT,
+    AgentFailureReply,
+    AgentRuntimeManifest,
+    AgentSearchReply,
+    AgentTripRequest,
+    BaggageIntent,
+    DecisionRow,
+    FlightAgent,
+    agent_runtime,
+    encode_agent_reply,
+    whole_itinerary_confirmed,
+)
 from agentic_flights.api import AgentAPI
 from agentic_flights.batch import BatchExecutor
 from agentic_flights.data_layers import (
@@ -61,6 +74,17 @@ from agentic_flights.strategy_engine import (
 
 __all__ = [
     "AgentAPI",
+    "AGENT_CONTRACT",
+    "AgentFailureReply",
+    "AgentRuntimeManifest",
+    "AgentSearchReply",
+    "AgentTripRequest",
+    "BaggageIntent",
+    "DecisionRow",
+    "FlightAgent",
+    "agent_runtime",
+    "encode_agent_reply",
+    "whole_itinerary_confirmed",
     "BatchExecutor",
     "BatchReport",
     "AirportReference",

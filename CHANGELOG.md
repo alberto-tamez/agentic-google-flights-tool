@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.1
+
+- Add the two-operation `FlightAgent` decision contract. Compact typed projections use
+  semantic cardinality bounds, while full evidence remains in the managed report.
+- Make the default MCP surface only `search` and `verify`. Developer mode retains the
+  legacy diagnostic and batch operations.
+- Preserve baggage as verification intent, centralize whole-itinerary confirmation, and
+  prevent caller dictionaries from overriding discovery mode.
+- Add `AgentAPI.search_flexible()` as the ordinary one-call entry point for finite airport,
+  date, and stay comparisons without automatic verification. Its published 20-second
+  call budget and 20-query work chunk return the latest resumable snapshot. Explicit
+  `None` values request synchronous exhaustion.
+- Accept a redundant template return date when it agrees with the stay range, and derive
+  an exact stay when no range was supplied.
+- Fall back from an unavailable implicit cache root to a private reusable temporary store;
+  explicit and unsafe roots still fail without fallback.
+
 ## 0.7.0
 
 - Add a machine-readable flight-strategy playbook with safe defaults, explicit

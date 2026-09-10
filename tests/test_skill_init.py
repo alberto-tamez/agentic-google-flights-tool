@@ -46,7 +46,7 @@ def test_project_skill_installs_for_both_harnesses(tmp_path: Path) -> None:
         assert "name: agentic-flights" in text
         assert "license: MIT" in text
         assert "Python 3.11+" in text
-        assert "AgentAPI.plan()" in text
+        assert "FlightAgent.search" in text
 
     repeated = install_skill(project_dir=tmp_path)
     assert {item["action"] for item in repeated["skills"]} == {"unchanged"}

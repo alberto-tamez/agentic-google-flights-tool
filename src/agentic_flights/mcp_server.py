@@ -9,6 +9,7 @@ from typing import Any, Literal, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from agentic_flights.agent import FlightAgent
 from agentic_flights.api import AgentAPI
 
 
@@ -16,6 +17,7 @@ class NextAction(BaseModel):
     operation: Literal[
         "schema",
         "plan",
+        "search_flexible",
         "start",
         "explore",
         "compare",
@@ -46,9 +48,7 @@ class VerificationMatch(BaseModel):
     match_scope: Literal["outbound", "whole_itinerary"]
     whole_itinerary_matched: bool
     uncompared_journey_indexes: list[int]
-    identity_basis: Literal[
-        "provider_segments", "detailed_schedule", "journey_summary", "none"
-    ]
+    identity_basis: Literal["provider_segments", "detailed_schedule", "journey_summary", "none"]
     complete_quotes_found: int
     matching_quotes: int
     matching_result_ids: list[str]
@@ -93,7 +93,10 @@ def _handler(method):
     @wraps(method)
     def call(**arguments) -> ToolResponse:
         try:
-            return ToolResponse.model_validate(method(**arguments))
+            result = method(**arguments)
+            if isinstance(result, BaseModel):
+                result = result.model_dump(mode="json")
+            return ToolResponse.model_validate(result)
         except (ValueError, OSError) as exc:
             validation = (
                 exc.errors(include_input=False, include_url=False, include_context=False)
@@ -102,12 +105,11 @@ def _handler(method):
             )
             topic = {
                 "plan": "space",
+                "search_flexible": "space",
                 "start": "start",
                 "compare": "filters",
                 "alternatives": "filters",
-            }.get(
-                method.__name__, method.__name__ if method.__name__ != "schema" else "operations"
-            )
+            }.get(method.__name__, method.__name__ if method.__name__ != "schema" else "operations")
             return ToolResponse(
                 ok=False,
                 error=ToolError(
@@ -131,40 +133,52 @@ def _handler(method):
     return call
 
 
-def create_server(api: AgentAPI | None = None):
+def create_server(api: AgentAPI | None = None, *, developer_mode: bool = False):
     try:
         from mcp.server import MCPServer
     except ImportError as exc:
         raise RuntimeError("Install agentic-flights[mcp] to use MCP") from exc
     api = api or AgentAPI()
-    server = MCPServer(
-        "Agentic Flights",
-        instructions=(
-            "Use start for exact trips and plan for flexible date or airport searches. Continue "
-            "saved runs with explore. Compare before inspecting or verifying selected results. "
+    instructions = (
+        "Call search once, choose one candidate_ref from its bounded decision rows, then "
+        "call verify with that search_ref and candidate_ref. Do not inspect repository files, "
+        "schemas, or provider state. Report incomplete coverage and blocked verification."
+        if not developer_mode
+        else (
+            "Use start for exact trips and search_flexible for ordinary flexible date, airport, "
+            "or stay comparisons. Use plan and explore for explicitly bounded or interruptible "
+            "work. After comparing, check alternatives, then verify only selected results. "
             "Stop a verification run when verification_satisfied is true. Treat run IDs, result "
             "IDs, continuations, and provider diagnostics as private agent state; do not include "
             "them in user-facing recommendations unless the user requests diagnostics."
-        ),
+        )
     )
-    for name in (
-        "schema",
-        "plan",
-        "start",
-        "explore",
-        "compare",
-        "alternatives",
-        "inspect",
-        "verify",
-        "issues",
-        "playbook",
-        "strategy_plan",
-        "start_strategy_plan",
-        "strategy_results",
-        "discover_route_graph",
-        "start_auto_strategy_plan",
-    ):
-        server.tool(name=name)(_handler(getattr(api, name)))
+    server = MCPServer("Agentic Flights", instructions=instructions)
+    target = api if developer_mode else FlightAgent(api)
+    names = (
+        (
+            "schema",
+            "plan",
+            "search_flexible",
+            "start",
+            "explore",
+            "compare",
+            "alternatives",
+            "inspect",
+            "verify",
+            "issues",
+            "playbook",
+            "strategy_plan",
+            "start_strategy_plan",
+            "strategy_results",
+            "discover_route_graph",
+            "start_auto_strategy_plan",
+        )
+        if developer_mode
+        else ("search", "verify")
+    )
+    for name in names:
+        server.tool(name=name)(_handler(getattr(target, name)))
     return server
 
 

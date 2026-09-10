@@ -48,19 +48,22 @@ space = SearchSpace(
     departure_start=departure, departure_end=departure + timedelta(days=6),
     min_nights=12, max_nights=15,
 )
-run = api.plan(space.model_dump(mode="json"))
-while run["progress"]["can_continue"]:
-    run = api.explore(run["run_id"], prefer=["price", "duration", "stops"])
-    # Persist run_id. Stop explicitly if the user's satisfaction condition is met.
-run_id = run["run_id"]
-if not run["progress"]["coverage_complete"]:
+page = api.search_flexible(
+    space.model_dump(mode="json"),
+    {"currency": "EUR", "max_total_stops": 1},
+    prefer=["price", "duration", "stops"],
+    work_chunk=None,
+    chunk_seconds=None,  # explicitly exhaust this declared finite space
+)
+run_id = page["run_id"]
+if not page["progress"]["coverage_complete"]:
     diagnostics = api.issues(run_id)  # errors and retryability, without a full dump
-page = api.compare(run_id, {"currency": "EUR", "max_total_stops": 1})
-ids = [item["result_id"] for item in page["results"]]
+tradeoffs = api.alternatives(run_id, {"currency": "EUR", "max_total_stops": 1})
+ids = tradeoffs["result_ids"]
 if not ids:
     print("No matching observed options", page["progress"])
 else:
-    # Choose according to the user's preferences; this example verifies the page.
+    # Choose according to the user's preferences, then make one verification call.
     verified = api.verify(run_id, ids, require_bag=True)
     while verified["progress"]["can_continue"]:
         verified = api.explore(verified["run_id"])
@@ -139,8 +142,16 @@ Pass only fields needed by the trip. The returned run resumes through `explore()
 
 ### Exact trips, open jaw, and multi-city
 
-`plan()` expands one-way templates into one-way or round-trip searches. It rejects
-both `return_date` and `additional_segments` in the template. For exact trips,
+`search_flexible()` is the high-level finite-space entry point. By default it advances
+at most 20 queries for up to 20 seconds and returns `compare()` output for the latest immutable
+snapshot. The `workflow` object reports its query chunk, time budget, effective store,
+stop reason, and whether work can resume. Pass an explicit `work_chunk` or time budget
+to change one call. Pass both as `None` to request synchronous exhaustion. None of these
+options shrink the declared search space. `plan()` plus `explore()` remains available when the
+caller needs direct control over interruption.
+A template `return_date` is normalized when its stay agrees with `min_nights` and
+`max_nights`; when those fields are absent it defines an exact stay. Flexible spaces still
+reject `additional_segments`. For exact trips,
 including open jaw and multi-city, pass complete search dictionaries to
 `AgentAPI.start()`. Use
 `additional_segments` for every flight after the first; leave `return_date` unset
@@ -288,7 +299,7 @@ agentic-flights show RUN_ID RESULT_ID
 
 For MCP, install the `mcp` extra. The optional adapter uses the official MCP Python
 SDK v2 and supports stdio and stateless Streamable HTTP on `127.0.0.1:8000/mcp`.
-It exposes `schema`, `plan`, `explore`, `compare`, `alternatives`, `inspect`,
+It exposes `schema`, `plan`, `search_flexible`, `explore`, `compare`, `alternatives`, `inspect`,
 `verify`, and `issues`. It accepts saved run IDs rather than filesystem paths. It is a local
 single-user service; remote multi-user hosting requires authentication and isolated
 stores. Agent-generated loops run in the agent's own execution environment.
@@ -299,10 +310,18 @@ Managed runs expire after seven idle days by default; storage defaults are 50 ru
 and 100 MB across managed reports/provider cache. These storage policies are
 configurable with `ManagedStore(policy=StorePolicy(...))`. Export persistent results
 before expiration. Missing/expired handles return errors, not invented results.
-If the default cache directory is not writable, set `AGENTIC_FLIGHTS_STORE`
-to a dedicated writable directory and keep that value when resuming saved runs.
+If the implicit default cache directory is unavailable because of permissions or a
+read-only filesystem, the API uses a private reusable directory under the system temp
+directory. Explicit roots and unsafe paths fail instead of falling back. Set
+`AGENTIC_FLIGHTS_STORE` to a dedicated writable directory when persistence across system
+temp cleanup matters, and keep that value when resuming saved runs.
 `AgentAPI()` reads this override; its optional `store` argument takes a `ManagedStore`
 object, not a path string.
+
+If a template return date is 8 nights after its template departure and the space says
+`min_nights=7, max_nights=9`, normalization removes the redundant template date and
+searches 7, 8, and 9-night stays. With no range, the same date derives an exact 8-night
+stay. A return date outside an explicit range is an error.
 Use the same Python environment for the CLI and API; check its installed version
 with `python -c 'import importlib.metadata; print(importlib.metadata.version("agentic-flights"))'`.
 
