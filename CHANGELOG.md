@@ -4,6 +4,10 @@
 
 - Add a machine-readable flight-strategy playbook with safe defaults, explicit
   separate-ticket risk, contract-sensitive opt-in, and unsupported-provider boundaries.
+- Label each strategy as automated, manual-input, external-provider, or advisory-only
+  so catalog coverage cannot be mistaken for executable coverage.
+- Distinguish a component with no observed inventory from pending work and provider
+  failure in combined strategy results.
 - Generate unranked search hypotheses for nearby airports, positioning gateways,
   mixed one-way tickets, and explicit hidden-city candidates.
 - Derive positioning gateways and opt-in beyond destinations from a supplied route
@@ -16,6 +20,8 @@
   mode for exhaustive, resumable coverage without city-specific pruning.
 - Keep gateway access cost, access time, and disruption buffers separate so agents can
   compare door-to-door value without a hidden composite score.
+- Report arithmetic savings against the lowest observed direct fare while keeping time,
+  stops, ticket count, hotel nights, and risk as separate dimensions.
 - Require carry-on-only travel and a separate return search before producing a
   hidden-city hypothesis; retain operational and contract warnings beside the result.
 - Attach carrier conditions to contract-sensitive playbook entries so agents can check

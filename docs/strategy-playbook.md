@@ -15,6 +15,8 @@ score and it does not assume that a lower airfare is a cheaper trip.
 The agent chooses a recommendation from the traveler's stated priorities. Without
 those priorities, it labels the cheapest, shortest, simplest, and highest-confidence
 choices rather than inventing a weighted score.
+Each candidate includes `savings_vs_direct` against the lowest observed direct fare.
+That is an arithmetic comparison, not a conversion of time or risk into money.
 
 ## Strategy groups
 
@@ -27,6 +29,14 @@ choices rather than inventing a weighted score.
 | Route-specific | fifth-freedom segments | Off until a current route source supplies candidates |
 | Contract-sensitive | hidden city, unused return, back-to-back or nested tickets | Always off |
 | External inventory | points and mistake-fare monitoring | Unsupported without another provider |
+
+Each machine-readable entry also has an implementation status:
+
+- `automated` means the program can generate and execute the search.
+- `manual_input` means the tactic is supported after the traveler or agent supplies
+  intent or ground-access facts that cannot be inferred safely.
+- `external_provider` means another current inventory source is required.
+- `advisory_only` means the program explains the tactic and risk but does not automate it.
 
 Call `AgentAPI.playbook()` for the catalog. Call `AgentAPI.strategy_plan()` with the
 base trip and a current route graph to derive gateway and beyond-destination candidates

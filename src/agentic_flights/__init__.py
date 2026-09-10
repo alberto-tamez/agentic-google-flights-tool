@@ -21,6 +21,7 @@ from agentic_flights.models import (
 from agentic_flights.playbook import (
     AirportAccess,
     FlightStrategy,
+    ImplementationStatus,
     RouteEdge,
     RouteGraph,
     StrategyHypothesis,
@@ -55,6 +56,7 @@ __all__ = [
     "ShortlistSpec",
     "build_shortlist",
     "FlightStrategy",
+    "ImplementationStatus",
     "RouteEdge",
     "RouteGraph",
     "StrategyRisk",

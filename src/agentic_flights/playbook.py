@@ -20,6 +20,13 @@ class StrategyRisk(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
+class ImplementationStatus(StrEnum):
+    AUTOMATED = "automated"
+    MANUAL_INPUT = "manual_input"
+    EXTERNAL_PROVIDER = "external_provider"
+    ADVISORY_ONLY = "advisory_only"
+
+
 class FlightStrategy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -28,6 +35,7 @@ class FlightStrategy(BaseModel):
     purpose: str
     search_pattern: str
     risk: StrategyRisk
+    implementation_status: ImplementationStatus
     default_enabled: bool
     requirements: list[str] = Field(default_factory=list)
     failure_modes: list[str] = Field(default_factory=list)
@@ -161,6 +169,7 @@ STRATEGIES = (
         purpose="Find fare changes around the requested dates without changing the trip itself.",
         search_pattern="Sweep departure dates and stay lengths before narrowing the shortlist.",
         risk=StrategyRisk.STANDARD,
+        implementation_status=ImplementationStatus.AUTOMATED,
         default_enabled=True,
     ),
     FlightStrategy(
@@ -169,6 +178,7 @@ STRATEGIES = (
         purpose="Compare airports reachable by practical ground transport.",
         search_pattern="Search each reachable origin and add round-trip ground cost and time.",
         risk=StrategyRisk.STANDARD,
+        implementation_status=ImplementationStatus.MANUAL_INPUT,
         default_enabled=True,
         requirements=["ground_access_cost", "ground_access_time", "transfer_buffer"],
     ),
@@ -180,6 +190,7 @@ STRATEGIES = (
             "Search each viable destination airport and add onward ground cost and time."
         ),
         risk=StrategyRisk.STANDARD,
+        implementation_status=ImplementationStatus.MANUAL_INPUT,
         default_enabled=True,
         requirements=["ground_transfer_cost", "ground_transfer_time", "service_schedule"],
     ),
@@ -191,6 +202,7 @@ STRATEGIES = (
             "Price the feeder and main ticket separately, then combine door-to-door cost."
         ),
         risk=StrategyRisk.SEPARATE_TICKET,
+        implementation_status=ImplementationStatus.AUTOMATED,
         default_enabled=True,
         requirements=["feeder_fare", "main_fare", "connection_buffer", "baggage_recheck"],
         failure_modes=[
@@ -207,6 +219,7 @@ STRATEGIES = (
             "Search each ticket separately and join only connections with a safe buffer."
         ),
         risk=StrategyRisk.SEPARATE_TICKET,
+        implementation_status=ImplementationStatus.MANUAL_INPUT,
         default_enabled=False,
         requirements=["connection_buffer", "terminal_change", "entry_rules", "baggage_recheck"],
         failure_modes=[
@@ -220,6 +233,7 @@ STRATEGIES = (
         purpose="Compare two one-way tickets with a conventional round trip.",
         search_pattern="Search outbound and return independently and combine exact totals.",
         risk=StrategyRisk.STANDARD,
+        implementation_status=ImplementationStatus.AUTOMATED,
         default_enabled=True,
         requirements=["two_complete_one_way_totals"],
     ),
@@ -229,6 +243,7 @@ STRATEGIES = (
         purpose="Fly into one city and home from another when ground travel connects the trip.",
         search_pattern="Search one multi-city ticket and price the surface sector separately.",
         risk=StrategyRisk.STANDARD,
+        implementation_status=ImplementationStatus.MANUAL_INPUT,
         default_enabled=True,
         requirements=["surface_sector_cost", "surface_sector_time"],
     ),
@@ -238,6 +253,7 @@ STRATEGIES = (
         purpose="Turn connection time into a second destination when the schedule permits.",
         search_pattern="Compare ordinary connections with multi-city pricing around the hub.",
         risk=StrategyRisk.STANDARD,
+        implementation_status=ImplementationStatus.MANUAL_INPUT,
         default_enabled=False,
         requirements=["entry_rules", "airport_transfer_time", "minimum_useful_stopover"],
     ),
@@ -247,6 +263,7 @@ STRATEGIES = (
         purpose="Check international segments sold by an airline based in a third country.",
         search_pattern="Include known fifth-freedom operators when they serve the requested route.",
         risk=StrategyRisk.STANDARD,
+        implementation_status=ImplementationStatus.EXTERNAL_PROVIDER,
         default_enabled=False,
         requirements=["current_route_schedule"],
     ),
@@ -258,6 +275,7 @@ STRATEGIES = (
             "Repeat the same itinerary only for truthful country and residency contexts."
         ),
         risk=StrategyRisk.CONTRACT_SENSITIVE,
+        implementation_status=ImplementationStatus.ADVISORY_ONLY,
         default_enabled=False,
         requirements=["truthful_residency", "accepted_payment_method", "fare_eligibility"],
         failure_modes=["A fare can require local residency, payment, or documentation."],
@@ -271,6 +289,7 @@ STRATEGIES = (
             "Search beyond destinations while requiring the intended city as a connection."
         ),
         risk=StrategyRisk.CONTRACT_SENSITIVE,
+        implementation_status=ImplementationStatus.AUTOMATED,
         default_enabled=False,
         requirements=[
             "explicit_user_opt_in",
@@ -299,6 +318,7 @@ STRATEGIES = (
             "Compare one-way and round-trip totals without assuming the unused leg is safe."
         ),
         risk=StrategyRisk.CONTRACT_SENSITIVE,
+        implementation_status=ImplementationStatus.AUTOMATED,
         default_enabled=False,
         requirements=["explicit_user_opt_in", "final_segment_only", "current_airline_terms_review"],
         failure_modes=["Skipping a segment can cancel later travel on the same reservation."],
@@ -314,6 +334,7 @@ STRATEGIES = (
         purpose="Detect overlapping tickets used to change fare construction.",
         search_pattern="Model only for explicit diagnostics; never include in an automatic sweep.",
         risk=StrategyRisk.CONTRACT_SENSITIVE,
+        implementation_status=ImplementationStatus.ADVISORY_ONLY,
         default_enabled=False,
         requirements=["explicit_user_opt_in", "current_airline_terms_review"],
         failure_modes=["Overlapping ticket use can conflict with airline contract terms."],
@@ -328,6 +349,7 @@ STRATEGIES = (
         purpose="Compare cash fares with airline or bank-program award inventory.",
         search_pattern="Requires authenticated award inventory and account-specific balances.",
         risk=StrategyRisk.UNSUPPORTED,
+        implementation_status=ImplementationStatus.EXTERNAL_PROVIDER,
         default_enabled=False,
         requirements=["award_inventory_provider", "points_balance", "taxes_and_fees"],
     ),
@@ -337,6 +359,7 @@ STRATEGIES = (
         purpose="Watch for short-lived fares that cannot be discovered reliably in one search.",
         search_pattern="Requires recurring monitoring and a notification policy.",
         risk=StrategyRisk.UNSUPPORTED,
+        implementation_status=ImplementationStatus.EXTERNAL_PROVIDER,
         default_enabled=False,
         requirements=["recurring_monitor", "notification_policy"],
     ),
@@ -630,13 +653,30 @@ def evaluate_strategy_results(
             key=lambda item: item[0],
         )
         if len(mapped) != len(hypothesis["searches"]) or any(
-            outcome is None or outcome.status != "success" for _, outcome in mapped
+            outcome is None for _, outcome in mapped
         ):
             incomplete.append(
                 {
                     "hypothesis_id": hypothesis["hypothesis_id"],
                     "strategy_id": hypothesis["strategy_id"],
-                    "reason": "One or more component searches are unfinished or failed.",
+                    "code": "component_pending",
+                    "reason": "One or more component searches have not finished.",
+                }
+            )
+            continue
+        errors = [outcome for _, outcome in mapped if outcome.status == "error"]
+        empty = [outcome for _, outcome in mapped if outcome.status == "empty"]
+        if errors or empty:
+            incomplete.append(
+                {
+                    "hypothesis_id": hypothesis["hypothesis_id"],
+                    "strategy_id": hypothesis["strategy_id"],
+                    "code": "component_error" if errors else "component_empty",
+                    "reason": (
+                        "One or more component searches failed."
+                        if errors
+                        else "One or more component searches returned no observed options."
+                    ),
                 }
             )
             continue
@@ -735,11 +775,6 @@ def evaluate_strategy_results(
             left_values != right_values
         )
 
-    frontier = [
-        candidate
-        for candidate in candidates
-        if not any(dominates(other, candidate) for other in candidates)
-    ]
     direct_prices = {}
     for candidate in candidates:
         if candidate["hypothesis_id"] != "direct":
@@ -747,6 +782,17 @@ def evaluate_strategy_results(
         current = direct_prices.get(candidate["currency"])
         if current is None or candidate["total_price"] < current:
             direct_prices[candidate["currency"]] = candidate["total_price"]
+    for candidate in candidates:
+        baseline = direct_prices.get(candidate["currency"])
+        candidate["direct_price_baseline"] = baseline
+        candidate["savings_vs_direct"] = (
+            None if baseline is None else baseline - candidate["total_price"]
+        )
+    frontier = [
+        candidate
+        for candidate in candidates
+        if not any(dominates(other, candidate) for other in candidates)
+    ]
     promising_probes = []
     for probe in gateway_probes:
         baseline = direct_prices.get(probe["currency"])

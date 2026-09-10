@@ -5,16 +5,19 @@ import pytest
 from agentic_flights import (
     AgentAPI,
     BatchExecutor,
+    BatchReport,
     FlightLeg,
     FlightOption,
     RouteGraph,
     SearchCoverage,
     StrategyRisk,
     build_strategy_plan,
+    evaluate_strategy_results,
     list_strategies,
 )
 from agentic_flights.cache import FileCache
 from agentic_flights.cli import run
+from agentic_flights.models import BatchCounts, SearchOutcome
 from agentic_flights.provider import ProviderResult
 from agentic_flights.store import ManagedStore
 
@@ -28,6 +31,7 @@ def test_strategy_catalog_has_unique_ids_and_safe_defaults() -> None:
         for strategy in strategies
         if strategy.risk in {StrategyRisk.CONTRACT_SENSITIVE, StrategyRisk.UNSUPPORTED}
     )
+    assert all(strategy.implementation_status for strategy in strategies)
 
 
 def test_ground_access_requires_a_complete_estimate() -> None:
@@ -283,6 +287,8 @@ def test_automatic_strategy_sweep_surfaces_gateway_price_headroom(tmp_path) -> N
     assert run["progress"]["coverage_complete"] is True
     assert gateway["airfare"] == 165
     assert gateway["total_price"] == 165
+    assert gateway["direct_price_baseline"] == 355
+    assert gateway["savings_vs_direct"] == 190
     assert gateway["ticket_count"] == 2
     assert gateway["buffer_nights"] == 2
     assert gateway["components"] == [
@@ -291,6 +297,55 @@ def test_automatic_strategy_sweep_surfaces_gateway_price_headroom(tmp_path) -> N
     ]
     assert results["gateway_probes"] == []
     assert results["hidden_weights"] is False
+
+
+def test_strategy_results_distinguish_empty_components_from_failures(tmp_path) -> None:
+    plan = build_strategy_plan(
+        {
+            "origin": "AAA",
+            "destination": "DDD",
+            "departure_date": "2027-01-14",
+            "currency": "EUR",
+            "language": "en-US",
+            "country": "ES",
+        },
+        positioning_origins=[
+            {
+                "airport": "BBB",
+                "access_mode": "ground",
+                "estimated_cost": 10,
+                "estimated_minutes": 60,
+            }
+        ],
+    )
+    report = BatchReport(
+        outcomes=[
+            SearchOutcome(
+                request_id="0",
+                search_spec=None,
+                status="empty",
+                elapsed_ms=1,
+                requests_made=1,
+            )
+        ],
+        counts=BatchCounts(
+            total=1,
+            success=0,
+            empty=1,
+            error=0,
+            unique_searches=1,
+            network_requests=1,
+            cache_hits=0,
+        ),
+        ranked_by_currency={},
+    )
+    result = evaluate_strategy_results(
+        report,
+        {"hypotheses": [plan["hypotheses"][0]], "excluded": []},
+        {"0": {"hypothesis_id": "direct", "component_index": 0}},
+    )
+
+    assert result["incomplete_hypotheses"][0]["code"] == "component_empty"
 
 
 def test_cli_exposes_strategy_operation_guides(capsys) -> None:
