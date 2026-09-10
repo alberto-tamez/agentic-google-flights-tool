@@ -71,6 +71,12 @@ class StrategyHypothesis(BaseModel):
     hypothesis_id: str
     strategy_id: str
     risk: StrategyRisk
+    validation_basis: Literal[
+        "not_applicable",
+        "explicit_input",
+        "topology_path",
+        "empirical_fare_required",
+    ] = "not_applicable"
     searches: list[dict[str, Any]] = Field(min_length=1)
     component_roles: list[str] = Field(min_length=1)
     true_origin: str
@@ -471,6 +477,13 @@ def build_strategy_plan(
                 access=access,
                 component_roles=roles,
                 separate_tickets=True,
+                validation_basis=(
+                    "topology_path"
+                    if graph is not None and gateway_candidate_mode == "path"
+                    else "empirical_fare_required"
+                    if graph is not None
+                    else "explicit_input"
+                ),
                 access_priced_by_search=access_priced_by_search,
                 buffer_nights=buffer_nights,
                 caveats=[
@@ -697,6 +710,9 @@ def evaluate_strategy_results(
                         "hypothesis_id": hypothesis["hypothesis_id"],
                         "strategy_id": hypothesis["strategy_id"],
                         "risk": hypothesis["risk"],
+                        "validation_basis": hypothesis.get(
+                            "validation_basis", "not_applicable"
+                        ),
                         "currency": next(iter(currencies)),
                         "main_ticket_price": airfare,
                         "access_cost": access_cost,
@@ -714,6 +730,9 @@ def evaluate_strategy_results(
                     "hypothesis_id": hypothesis["hypothesis_id"],
                     "strategy_id": hypothesis["strategy_id"],
                     "risk": hypothesis["risk"],
+                    "validation_basis": hypothesis.get(
+                        "validation_basis", "not_applicable"
+                    ),
                     "currency": next(iter(currencies)),
                     "airfare": airfare,
                     "access_cost": access_cost,
@@ -832,6 +851,12 @@ def _hypothesis(
     component_roles: list[str] | None = None,
     ticketed_destination: str | None = None,
     separate_tickets: bool = False,
+    validation_basis: Literal[
+        "not_applicable",
+        "explicit_input",
+        "topology_path",
+        "empirical_fare_required",
+    ] = "not_applicable",
     access_priced_by_search: bool = False,
     buffer_nights: int = 0,
     caveats: list[str] | None = None,
@@ -850,6 +875,7 @@ def _hypothesis(
         access_minutes=access.estimated_minutes if access else 0,
         minimum_buffer_minutes=access.minimum_buffer_minutes if access else 0,
         separate_tickets=separate_tickets,
+        validation_basis=validation_basis,
         access_priced_by_search=access_priced_by_search,
         buffer_nights=buffer_nights,
         caveats=caveats or [],

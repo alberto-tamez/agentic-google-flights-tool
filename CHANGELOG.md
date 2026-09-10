@@ -14,10 +14,22 @@
   graph for any city pair, without hard-coded hub lists or city-specific rules.
 - Execute strategy sweeps in bounded batches and automatically price conservatively
   dated positioning and main tickets for every graph-derived gateway.
-- Load active scheduled destinations from air-routes.com's no-key public API with a
-  seven-day per-airport cache, then validate generated routes against live Google fares.
-- Use a small reciprocal-route gateway pass first and retain an explicit all-outgoing
-  mode for exhaustive, resumable coverage without city-specific pruning.
+- Load directionally ordered connection legs from air-routes.com, retain full route
+  metadata and rejection diagnostics, and keep the adapter experimental while its
+  automation, caching, and redistribution terms remain unclear.
+- Preserve source observation and retrieval times, checksums, replay age, and stale
+  fallback state instead of refreshing cached topology timestamps.
+- Use directionally validated paths by default. Keep all-outgoing expansion as empirical
+  candidate generation rather than false proof that a gateway reaches the destination.
+- Add a bounded, round-based engine for dated flight and ground events with Pareto labels,
+  explicit unknowns, separate risk and evidence classes, lazy whole-itinerary pricing,
+  and final-frontier verification.
+- Add exhaustive-equivalence tests and a deterministic benchmark that reports structural
+  candidates, pruned labels, provider requests, elapsed time, and frontier recall.
+- Reject incomplete empty provider observations from the fare cache while retaining
+  incomplete nonempty observations with their original coverage state.
+- Manage route-cache size, retention, permissions, and symlink safety with saved runs and
+  provider caches.
 - Keep gateway access cost, access time, and disruption buffers separate so agents can
   compare door-to-door value without a hidden composite score.
 - Report arithmetic savings against the lowest observed direct fare while keeping time,

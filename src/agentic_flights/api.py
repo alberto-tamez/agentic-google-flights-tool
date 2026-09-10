@@ -519,7 +519,11 @@ class AgentAPI:
         }
 
     def discover_route_graph(
-        self, origin: str, destination: str, include_beyond: bool = False
+        self,
+        origin: str,
+        destination: str,
+        include_beyond: bool = False,
+        include_positioning_candidates: bool = False,
     ) -> dict[str, Any]:
         """Load current scheduled destinations for automatic strategy planning."""
         from agentic_flights.route_sources import AirRoutesClient
@@ -527,10 +531,46 @@ class AgentAPI:
         self.store.initialize()
         source = self.route_source or AirRoutesClient(self.store.root / "route-cache")
         graph = source.build_graph(origin, destination, include_beyond=include_beyond)
+        if include_positioning_candidates:
+            load_destinations = getattr(source, "destinations", None)
+            if load_destinations is None:
+                raise ValueError(
+                    "The route source cannot enumerate outgoing positioning candidates."
+                )
+            extra_routes = load_destinations(origin)
+            unique = {
+                (route.origin, route.destination): route
+                for route in [*graph.routes, *extra_routes]
+            }
+            graph = graph.model_copy(update={"routes": list(unique.values())})
         return {
             **graph.model_dump(mode="json"),
             "network_requests": source.network_requests,
             "cache_hits": source.cache_hits,
+            "stale_cache_hits": getattr(source, "stale_cache_hits", 0),
+            "route_metadata": getattr(source, "route_metadata", {}),
+            "provenance": getattr(source, "provenance", {}),
+            "diagnostics": getattr(source, "diagnostics", {}),
+        }
+
+    def schedule_frontier(
+        self,
+        events: list[dict[str, Any]],
+        boundary: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Find feasible timetable paths inside an explicit finite boundary."""
+        from agentic_flights.strategy_engine import SearchBoundary, StrategyEngine
+
+        parsed_boundary = SearchBoundary.model_validate(boundary)
+        candidates, metrics = StrategyEngine().generate(events, parsed_boundary)
+        return {
+            "boundary": parsed_boundary.model_dump(mode="json"),
+            "candidates": [candidate.model_dump(mode="json") for candidate in candidates],
+            "metrics": metrics.model_dump(mode="json"),
+            "ordering": "unranked_pareto_frontier",
+            "structural_coverage_complete": True,
+            "pricing_required": True,
+            "global_minimum_claimed": False,
         }
 
     def start_auto_strategy_plan(
@@ -541,7 +581,7 @@ class AgentAPI:
         include_hidden_city: bool = False,
         include_throwaway_return: bool = False,
         throwaway_return_max_nights: int = 14,
-        gateway_candidate_mode: Literal["reciprocal", "all_outgoing"] = "reciprocal",
+        gateway_candidate_mode: Literal["path", "all_outgoing"] = "path",
         work_chunk: int = 8,
         chunk_seconds: float = 20,
     ) -> dict[str, Any]:
@@ -556,7 +596,8 @@ class AgentAPI:
         graph = self.discover_route_graph(
             base.origin,
             base.destination,
-            include_beyond=True,
+            include_beyond=include_hidden_city,
+            include_positioning_candidates=gateway_candidate_mode == "all_outgoing",
         )
         response = self.start_strategy_plan(
             trip,
@@ -567,7 +608,7 @@ class AgentAPI:
             auto_hidden_city=include_hidden_city,
             include_throwaway_return=include_throwaway_return,
             throwaway_return_max_nights=throwaway_return_max_nights,
-            max_gateway_main_legs=None,
+            max_gateway_main_legs=2,
             gateway_candidate_mode=gateway_candidate_mode,
             allow_contract_sensitive=allow_contract_sensitive,
             carry_on_only=carry_on_only,
@@ -580,7 +621,14 @@ class AgentAPI:
             "routes_loaded": len(graph["routes"]),
             "network_requests": graph["network_requests"],
             "cache_hits": graph["cache_hits"],
+            "stale_cache_hits": graph["stale_cache_hits"],
             "gateway_candidate_mode": gateway_candidate_mode,
+            "provenance": graph["provenance"],
+            "diagnostics": graph["diagnostics"],
+            "coverage_limitations": [
+                "Current-route topology is not requested-date availability.",
+                "The connection source returns its fewest-stop tier and may truncate alternatives.",
+            ],
         }
         return response
 

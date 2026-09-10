@@ -79,14 +79,23 @@ outside each end of the main trip. `strategy_results` sums those observed fares 
 keeps the separate-ticket, hotel, and connection caveats. Candidate discovery uses
 graph connectivity, never a permanent or city-specific hub list.
 
-Automatic route discovery uses the public air-routes.com destinations endpoint and a
-seven-day local cache. The source describes passenger routes operating now and includes
-seasonality, but it is not a fare or date-specific availability source. Google fare
-discovery still validates each generated hypothesis for the requested travel date.
-The default reciprocal gateway pass is smaller but can miss asymmetric service. Use
-`gateway_candidate_mode="all_outgoing"` when the user wants exhaustive coverage or the
-first pass finds no satisfactory tradeoff. State that expansion without listing its
-internal search handles.
+Automatic route discovery uses air-routes.com's public connection and destination
+endpoints with a managed seven-day cache. The adapter is experimental because the site
+does not publish clear reuse terms. It retains schedule and seasonality fields, source
+timestamps, cache age, checksums, and rejected-row diagnostics. This topology describes
+routes operating now, not fares or requested-date availability. Google still tests each
+generated hypothesis for the travel date. The default path mode uses directional legs.
+`all_outgoing` is candidate generation only and cannot prove onward reachability.
+When the connection endpoint returns a direct flight, its fewest-stop contract omits
+one-stop paths, so path mode can return no positioning gateway. Use `all_outgoing` only
+when empirical Google checks fit the declared pricing boundary. Those hypotheses carry
+`validation_basis="empirical_fare_required"` until the main fare search succeeds.
+
+When a dated flight or ground-event snapshot is available, pass it and an explicit
+`SearchBoundary` to `schedule_frontier()`. The boundary states the time window, maximum
+transfers, enabled strategies, risk classes, traveler constraints, snapshot ID, and
+pricing and verification budgets. The returned paths are structural candidates. Price
+each complete ticket construction lazily, then verify only the Pareto frontier.
 
 For positioning, add both access journeys, fares, buffers, baggage handling, possible
 hotels, and separate-ticket disruption risk. Hidden-city searches never run by default.

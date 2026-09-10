@@ -44,17 +44,21 @@ without city-specific rules. Explicit candidates remain available for ground air
 or manual overrides. The plan is unranked. Ground links, entry rules, and airline
 conditions still need current sources.
 
-`AgentAPI.start_auto_strategy_plan()` obtains that graph from air-routes.com's public
-airport-destinations endpoint. It makes one topology request for ordinary positioning
-and a second for opt-in hidden-city candidates, then caches each airport response for
-seven days. The topology says which passenger routes operate now; live fare discovery
-still tests the requested date because topology is not date-specific availability.
+`AgentAPI.start_auto_strategy_plan()` obtains directionally ordered legs from
+air-routes.com's connection endpoint and obtains beyond-destination routes only for the
+opt-in hidden-city case. The managed cache retains the original retrieval time and uses
+a marked stale fallback after temporary source failures. The adapter remains
+experimental until its automation, caching, commercial-use, derived-data,
+redistribution, attribution, and rate-limit terms are explicit.
 
-The automatic first pass uses `gateway_candidate_mode="reciprocal"`. It keeps airports
-listed from both the origin and destination, a cheap proxy for service in both
-directions. This can miss asymmetric or one-direction seasonal service. Use
-`gateway_candidate_mode="all_outgoing"` for the exhaustive second pass; bounded work
-chunks checkpoint the much larger set instead of pretending it is free.
+The automatic pass uses `gateway_candidate_mode="path"`. A gateway survives only when
+the supplied graph contains `origin -> gateway` and a directed path from the gateway to
+the destination. `all_outgoing` may generate extra empirical fare tests, but it is not
+topology proof and does not expand the source's declared coverage.
+If a direct route exists, the source's fewest-stop tier normally contains no connection
+gateway. In that case path mode returns none. All-outgoing mode marks each added gateway
+as `empirical_fare_required`; only a successful dated Google search validates that main
+ticket hypothesis.
 
 The gateway algorithm starts from the finite set of airports directly reachable from
 the true origin. It retains gateway G when the route graph can reach the true destination
@@ -62,6 +66,20 @@ from G within the configured number of flight legs. The bounded sweep prices bot
 main ticket and a conservative positioning ticket. For a round trip, the positioning
 ticket reaches G the day before and leaves G the day after the main ticket. This avoids
 pretending an unverified same-day connection is safe, but it can add two hotel nights.
+
+## Dated event engine
+
+`StrategyEngine` works on a separate scheduled-event layer. It scans feasible events in
+rounds, keeps non-dominated labels, and stops at the boundary's transfer limit. Labels
+carry absolute times, ticket boundaries, lower bounds, ground time, baggage and
+connection state, risk, and unresolved evidence. It does not treat topology edges or
+observed fares as permanent flight-edge prices.
+
+The engine prices direct candidates first, then skips only candidates whose admissible
+lower bound cannot enter a compatible observed frontier. Provider pricing receives the
+complete structural itinerary. Verification runs only on the final frontier and counts
+browser transitions separately. The result includes generated and pruned labels,
+provider requests, cache hits, elapsed time, unpriced candidates, and coverage flags.
 
 ## Positioning gateways
 

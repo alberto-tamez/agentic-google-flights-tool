@@ -1,5 +1,18 @@
 from agentic_flights.api import AgentAPI
 from agentic_flights.batch import BatchExecutor
+from agentic_flights.data_layers import (
+    AirportReference,
+    BagSelection,
+    FlightScheduledEvent,
+    GroundScheduledEvent,
+    OperationalObservation,
+    PassengerComposition,
+    ProvenanceEnvelope,
+    RouteTopologyRecord,
+    RulesRiskEvidence,
+    WholeItineraryOfferKey,
+    WholeItineraryOfferRecord,
+)
 from agentic_flights.exploration import Exploration, ExplorationProgress, SearchSpace
 from agentic_flights.filtering import ShortlistReport, ShortlistSpec, build_shortlist
 from agentic_flights.models import (
@@ -31,11 +44,36 @@ from agentic_flights.playbook import (
     list_strategies,
 )
 from agentic_flights.route_sources import AirRoutesClient, RouteSourceError
+from agentic_flights.strategy_engine import (
+    EvidenceClass,
+    JourneyRisk,
+    OfferQuote,
+    PricedCandidate,
+    PricingObservation,
+    ScheduledEvent,
+    SearchBoundary,
+    StrategyEngine,
+    StrategySearchResult,
+    StructuralCandidate,
+    VerificationObservation,
+    exhaustive_price,
+)
 
 __all__ = [
     "AgentAPI",
     "BatchExecutor",
     "BatchReport",
+    "AirportReference",
+    "BagSelection",
+    "FlightScheduledEvent",
+    "GroundScheduledEvent",
+    "OperationalObservation",
+    "PassengerComposition",
+    "ProvenanceEnvelope",
+    "RouteTopologyRecord",
+    "RulesRiskEvidence",
+    "WholeItineraryOfferKey",
+    "WholeItineraryOfferRecord",
     "Exploration",
     "ExplorationProgress",
     "SearchSpace",
@@ -67,4 +105,16 @@ __all__ = [
     "evaluate_strategy_results",
     "AirRoutesClient",
     "RouteSourceError",
+    "EvidenceClass",
+    "JourneyRisk",
+    "OfferQuote",
+    "PricedCandidate",
+    "PricingObservation",
+    "ScheduledEvent",
+    "SearchBoundary",
+    "StrategyEngine",
+    "StrategySearchResult",
+    "StructuralCandidate",
+    "VerificationObservation",
+    "exhaustive_price",
 ]

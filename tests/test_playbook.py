@@ -139,6 +139,7 @@ def test_route_graph_finds_positioning_gateways_without_city_rules() -> None:
     assert gateways[0]["access_cost"] is None
     assert gateways[0]["access_priced_by_search"] is True
     assert gateways[0]["component_roles"] == ["main_ticket", "positioning_ticket"]
+    assert gateways[0]["validation_basis"] == "topology_path"
     assert gateways[0]["searches"][1]["origin"] == "MEX"
     assert gateways[0]["searches"][1]["destination"] == "CUN"
     assert gateways[0]["searches"][1]["departure_date"] == "2027-01-13"

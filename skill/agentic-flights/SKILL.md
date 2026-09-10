@@ -33,13 +33,20 @@ before the first search and update it if it is older. Use `agentic_flights.Agent
   destinations and derives gateways from actual connectivity rather than city-specific
   rules. Explicit airport candidates are only for ground access or manual overrides.
   Do not invent a universal gateway list or assume a historically cheap hub is still cheap.
-- Start with reciprocal gateways. If no satisfactory option appears or the user wants
-  exhaustive coverage, repeat with `gateway_candidate_mode="all_outgoing"`. Do not call
-  the reciprocal pass exhaustive.
+- Use the default directionally validated path mode. `all_outgoing` only generates
+  hypotheses; it does not prove that a gateway reaches the destination. Do not describe
+  topology as requested-date availability or call a truncated connection set exhaustive.
+  Because the source returns only its fewest-stop tier, path mode may yield no gateway
+  when a direct route exists. Use `all_outgoing` to test extra gateways empirically and
+  keep `validation_basis="empirical_fare_required"` visible in saved diagnostics.
 - Read `strategy_results()` after the bounded sweep. Route-graph gateways include a
   conservatively dated positioning ticket and the main ticket. Treat the summed fare as
   an observed separate-ticket composite until both tickets and connection logistics are
   verified. Never present an entry from `gateway_probes` as a complete alternative.
+- Use `schedule_frontier()` only when you have dated event records and can state the
+  route snapshot, departure window, maximum transfers, enabled strategies, traveler
+  constraints, and pricing budget. Price complete ticket constructions after structural
+  search. Verify only the resulting frontier.
 
 ## Choose a practical trip
 

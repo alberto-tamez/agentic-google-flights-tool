@@ -82,6 +82,7 @@ def test_owned_store_permissions_are_private(tmp_path) -> None:
     assert stat.S_IMODE(root.stat().st_mode) == 0o700
     assert stat.S_IMODE(store.runs.stat().st_mode) == 0o700
     assert stat.S_IMODE(store.provider_cache.stat().st_mode) == 0o700
+    assert stat.S_IMODE(store.route_cache.stat().st_mode) == 0o700
     assert stat.S_IMODE(report.stat().st_mode) == 0o600
 
 
@@ -105,6 +106,43 @@ def test_total_bytes_and_provider_entry_count_are_bounded(tmp_path) -> None:
     store.cleanup(keep_run=second_id)
     assert not old.exists()
     assert new.exists()
+
+
+def test_route_cache_is_included_in_cleanup_entry_and_byte_limits(tmp_path) -> None:
+    store = ManagedStore(
+        tmp_path / "managed",
+        StorePolicy(max_bytes=100, max_route_cache_entries=1),
+    )
+    store.initialize()
+    old = store.route_cache / "old.json"
+    new = store.route_cache / "new.json"
+    old.write_text("{}", encoding="utf-8")
+    new.write_text("{}", encoding="utf-8")
+    os.utime(old, (1, 1))
+    result = store.cleanup()
+    assert result["route_cache_entries"] == 1
+    assert not old.exists()
+    assert new.exists()
+
+    new.write_text("x" * 101, encoding="utf-8")
+    result = store.cleanup()
+    assert result["route_cache_entries"] == 1
+    assert not new.exists()
+
+
+def test_route_cache_symlink_is_rejected(tmp_path) -> None:
+    store = ManagedStore(tmp_path / "managed")
+    store.initialize()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    store.route_cache.rmdir()
+    try:
+        store.route_cache.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(StoreError) as error:
+        store.cleanup()
+    assert error.value.code == "unsafe_store"
 
 
 def test_cli_stdin_search_returns_handle_and_stdin_filter_uses_no_extra_files(

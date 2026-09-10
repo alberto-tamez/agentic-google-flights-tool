@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import stat
 from datetime import timedelta
 
+import pytest
 from conftest import make_option, make_spec
 
-from agentic_flights.cache import FileCache
+from agentic_flights.cache import CacheRecord, FileCache
 from agentic_flights.models import SearchCoverage
 
 
@@ -65,8 +67,78 @@ def test_cache_preserves_original_exploration_coverage(tmp_path, future_date) ->
         branch_errors=1,
         branch_errors_by_code={"timeout": 1},
         browser_transitions=17,
+        fully_explored=True,
     )
     cache.put(spec, "success", [make_option()], coverage)
     record = cache.get(spec)
     assert record is not None
     assert record.coverage == coverage
+
+
+@pytest.mark.parametrize(
+    "coverage",
+    [
+        SearchCoverage(candidates_seen=1),
+        SearchCoverage(fully_explored=True, source_truncated=True),
+        SearchCoverage(fully_explored=True, blocked=True),
+        SearchCoverage(fully_explored=True, continuation={"cursor": 1}),
+        SearchCoverage(fully_explored=True, budget_exhausted=True),
+    ],
+)
+def test_cache_rejects_incomplete_empty_observations(tmp_path, future_date, coverage) -> None:
+    cache = FileCache(tmp_path)
+    spec = make_spec("incomplete", future_date)
+    cache.put(spec, "empty", [], coverage)
+    assert cache.get(spec) is None
+
+
+def test_cache_preserves_incomplete_nonempty_observations(tmp_path, future_date) -> None:
+    cache = FileCache(tmp_path)
+    spec = make_spec("incomplete-success", future_date)
+    coverage = SearchCoverage(candidates_seen=1, source_truncated=True)
+    cache.put(spec, "success", [make_option()], coverage)
+    record = cache.get(spec)
+    assert record is not None
+    assert record.coverage == coverage
+
+
+def test_cache_only_stores_complete_empty_observations(tmp_path, future_date) -> None:
+    cache = FileCache(tmp_path)
+    spec = make_spec("empty", future_date)
+    cache.put(spec, "empty", [])
+    assert cache.get(spec) is None
+    cache.put(spec, "empty", [], SearchCoverage(fully_explored=True))
+    assert cache.get(spec) is not None
+
+
+def test_cache_rejects_legacy_incomplete_empty_record_on_read(tmp_path, future_date) -> None:
+    cache = FileCache(tmp_path, clock=lambda: 100)
+    spec = make_spec("legacy-empty", future_date)
+    tmp_path.mkdir(exist_ok=True)
+    path = tmp_path / f"{cache.key(spec)}.json"
+    path.write_text(
+        CacheRecord(created_at=100, status="empty", options=[]).model_dump_json(),
+        encoding="utf-8",
+    )
+
+    assert cache.get(spec) is None
+
+
+def test_cache_files_are_private_and_symlinks_are_rejected(tmp_path, future_date) -> None:
+    directory = tmp_path / "cache"
+    cache = FileCache(directory)
+    spec = make_spec("private", future_date)
+    cache.put(spec, "success", [make_option()])
+    path = directory / f"{cache.key(spec)}.json"
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked = tmp_path / "linked"
+    try:
+        linked.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(ValueError, match="symlink"):
+        FileCache(linked).put(spec, "success", [make_option()])

@@ -82,10 +82,11 @@ Use `api.schema("verify")` or another operation name for its inputs and descript
 no class or source inspection is needed. `schema("operations")` lists all operations.
 
 `api.playbook()` returns the strategy catalog with risk, requirements, and default
-status. `api.discover_route_graph()` loads the finite active destinations from the
-origin and, when needed, the true destination. The default air-routes.com client uses no
-API key and caches each airport response for seven days. `api.strategy_plan()` accepts
-a normal trip dictionary and that route graph.
+status. `api.discover_route_graph()` loads directionally ordered connection legs and,
+when needed, active routes beyond the true destination. The experimental air-routes.com
+adapter uses no API key and caches responses for seven days. It returns preserved route
+metadata, provenance, cache age, and parse diagnostics beside the graph.
+`api.strategy_plan()` accepts a normal trip dictionary and that route graph.
 It derives gateways from graph reachability and beyond destinations from outgoing routes;
 explicit airport candidates remain available for ground access and overrides.
 `start_strategy_plan()` executes the bounded component searches, while
@@ -99,12 +100,27 @@ Contract-sensitive hypotheses require an explicit flag; hidden-city generation a
 requires carry-on-only confirmation.
 
 `api.start_auto_strategy_plan()` combines route discovery and the bounded strategy
-sweep. Every airport directly reachable from the true origin becomes a positioning
-candidate; live Google searches test its main and positioning tickets. Set
+sweep. In `all_outgoing` mode, every airport directly reachable from the true origin
+becomes an empirical positioning candidate; live Google searches test its main and
+positioning tickets. Set
 `include_hidden_city=True` only after explicit user opt-in and carry-on confirmation.
-The default `gateway_candidate_mode="reciprocal"` intersects routes advertised from the
-origin and destination. `"all_outgoing"` searches every airport directly reachable
-from the origin and is the exhaustive, higher-cost pass.
+The default `gateway_candidate_mode="path"` requires the graph to contain a directed
+path from the gateway to the destination. `"all_outgoing"` searches every airport
+directly reachable from the origin, but does not prove onward connectivity and is never
+described as exhaustive unless the supplied graph itself is complete for the boundary.
+The source connection operation returns only its fewest-stop tier. A direct route can
+therefore leave path mode with no gateway candidates. All-outgoing hypotheses use
+`validation_basis="empirical_fare_required"`; a successful Google gateway-to-destination
+search is empirical validation, not topology proof.
+
+`api.schedule_frontier(events, boundary)` runs the round-based structural engine over
+dated flight and ground events. `boundary` declares the route snapshot, time window,
+maximum transfers, strategies, risk classes, traveler constraints, and budgets. It
+returns a deterministic, unranked frontier and metrics. It makes no fare requests;
+`StrategyEngine.search()` accepts explicit complete-itinerary pricing and verification
+callbacks for code integrations. Each callback receives the remaining request budget
+and must report the requests it consumed. Unknown values cannot dominate known values, and risk,
+currency, eligibility, and evidence classes remain separate.
 
 For an exact trip, call the API without a request file:
 

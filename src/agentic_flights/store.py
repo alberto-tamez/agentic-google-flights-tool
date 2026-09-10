@@ -25,6 +25,7 @@ class StorePolicy:
     max_runs: int = 50
     max_bytes: int = 100 * 1024 * 1024
     max_provider_cache_entries: int = 2_000
+    max_route_cache_entries: int = 1_000
 
 
 class ManagedStore:
@@ -33,6 +34,7 @@ class ManagedStore:
         self.policy = policy or StorePolicy()
         self.runs = self.root / "runs"
         self.provider_cache = self.root / "provider-cache"
+        self.route_cache = self.root / "route-cache"
 
     def initialize(self) -> None:
         if self.root.is_symlink():
@@ -50,7 +52,7 @@ class ManagedStore:
         elif sentinel.read_text(encoding="utf-8") != SENTINEL_TEXT:
             raise StoreError("unsafe_store", "managed store sentinel is invalid")
         self.root.chmod(0o700)
-        for directory in (self.runs, self.provider_cache):
+        for directory in (self.runs, self.provider_cache, self.route_cache):
             if directory.is_symlink():
                 raise StoreError("unsafe_store", "managed store directories cannot be symlinks")
             directory.mkdir(mode=0o700, exist_ok=True)
@@ -96,6 +98,7 @@ class ManagedStore:
         now = time.time()
         removed_runs = 0
         removed_cache = 0
+        removed_route_cache = 0
         runs = self._valid_runs()
         for _, run_id, report in list(runs):
             if run_id != keep_run and now - report.stat().st_mtime > self.policy.ttl_seconds:
@@ -115,17 +118,40 @@ class ManagedStore:
             path.unlink(missing_ok=True)
             removed_cache += 1
 
+        route_cache_files = self._route_cache_files()
+        for modified, path in list(route_cache_files):
+            if now - modified > self.policy.ttl_seconds:
+                path.unlink(missing_ok=True)
+                removed_route_cache += 1
+        route_cache_files = self._route_cache_files()
+        for _, path in route_cache_files[self.policy.max_route_cache_entries :]:
+            path.unlink(missing_ok=True)
+            removed_route_cache += 1
+
         while self._managed_bytes() > self.policy.max_bytes:
             cache_files = self._provider_cache_files()
-            if cache_files:
-                cache_files[-1][1].unlink(missing_ok=True)
-                removed_cache += 1
+            route_cache_files = self._route_cache_files()
+            oldest_cache = [
+                *((modified, path, "provider") for modified, path in cache_files),
+                *((modified, path, "route") for modified, path in route_cache_files),
+            ]
+            if oldest_cache:
+                _, path, cache_kind = min(oldest_cache)
+                path.unlink(missing_ok=True)
+                if cache_kind == "provider":
+                    removed_cache += 1
+                else:
+                    removed_route_cache += 1
                 continue
             removable = [item for item in self._valid_runs() if item[1] != keep_run]
             if not removable:
                 break
             removed_runs += self._delete_run(removable[-1][1])
-        return {"runs": removed_runs, "provider_cache_entries": removed_cache}
+        return {
+            "runs": removed_runs,
+            "provider_cache_entries": removed_cache,
+            "route_cache_entries": removed_route_cache,
+        }
 
     def _valid_runs(self) -> list[tuple[float, str, Path]]:
         if self.runs.is_symlink():
@@ -153,6 +179,16 @@ class ManagedStore:
                 found.append((path.stat().st_mtime, path))
         return sorted(found, reverse=True)
 
+    def _route_cache_files(self) -> list[tuple[float, Path]]:
+        if self.route_cache.is_symlink():
+            raise StoreError("unsafe_store", "route cache directory cannot be a symlink")
+        found = [
+            (path.stat().st_mtime, path)
+            for path in self.route_cache.glob("*.json")
+            if not path.is_symlink() and path.is_file()
+        ]
+        return sorted(found, reverse=True)
+
     def _delete_run(self, run_id: str) -> int:
         if not RUN_ID.fullmatch(run_id):
             return 0
@@ -172,7 +208,7 @@ class ManagedStore:
     def _managed_bytes(self) -> int:
         return sum(report.stat().st_size for _, _, report in self._valid_runs()) + sum(
             path.stat().st_size for _, path in self._provider_cache_files()
-        )
+        ) + sum(path.stat().st_size for _, path in self._route_cache_files())
 
 
 def _default_root() -> Path:
