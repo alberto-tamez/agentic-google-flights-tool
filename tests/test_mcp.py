@@ -19,7 +19,7 @@ def test_mcp_in_memory_schema_and_plan(tmp_path):
     api = make_api(tmp_path)
 
     async def check():
-        async with Client(create_server(api)) as client:
+        async with Client(create_server(api, developer_mode=True)) as client:
             result = await client.call_tool("schema", {"topic": "space"})
             assert "origins" in json.dumps(result.structured_content)
             space = SearchSpace(
@@ -57,7 +57,7 @@ def test_stateless_http_across_client_connections(tmp_path):
         sock = socket.socket()
         sock.bind(("127.0.0.1", 0))
         address = "http://127.0.0.1:" + str(sock.getsockname()[1]) + "/mcp"
-        app = create_server(make_api(tmp_path)).streamable_http_app(
+        app = create_server(make_api(tmp_path), developer_mode=True).streamable_http_app(
             stateless_http=True, json_response=True
         )
         server = uvicorn.Server(uvicorn.Config(app, log_level="error"))
@@ -92,7 +92,7 @@ def test_mcp_errors_can_be_repaired_and_schemas_are_discoverable(tmp_path):
     from agentic_flights.mcp_server import create_server
 
     async def check():
-        async with Client(create_server(make_api(tmp_path))) as c:
+        async with Client(create_server(make_api(tmp_path), developer_mode=True)) as c:
             bad = (await c.call_tool("plan", {"space": {}})).structured_content
             assert bad["ok"] is False and bad["error"]["validation"]
             assert bad["error"]["next_action"]["arguments"]["topic"] == "space"

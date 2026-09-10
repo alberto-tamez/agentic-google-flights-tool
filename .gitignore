@@ -5,6 +5,7 @@
 **/__pycache__/
 # Keep legacy local output out of commits; new exports belong outside the checkout.
 artifacts/
+.agentic-flights-work/
 # Local experiments and evaluation reports never belong in releases.
 /experiments/
 .coverage

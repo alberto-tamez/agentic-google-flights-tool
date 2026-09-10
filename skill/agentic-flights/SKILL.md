@@ -6,8 +6,9 @@ license: MIT
 
 # Agentic Flights
 
-Use Python 3.11+ and agentic-flights 0.7.1 or newer. Check the installed version once
-before the first search and update it if it is older. Use `agentic_flights.AgentAPI`.
+Use Python 3.11+ and agentic-flights 0.7.1 or newer. Import `FlightAgent` and call its
+typed `search()` method directly. If that import fails, update the installed package.
+Do not inspect the repository, API source, schemas, or guides before searching.
 
 ## Search
 
@@ -16,21 +17,16 @@ before the first search and update it if it is older. Use `agentic_flights.Agent
   Ask only when missing information would change the trip.
 - Pass compact in-memory dictionaries. Never create a JSON request file for an
   agent-driven call. Omit default fields and invented limits.
-- Exact trips use `AgentAPI.start(search)`; pass a list only for multiple searches.
-  Open-jaw and multi-city trips are one search with `additional_segments`. Flexible
-  airports, dates, or trip lengths ordinarily use `AgentAPI.search_flexible()`.
-  Use `AgentAPI.plan()` followed by `explore()` only when work must be interrupted or
-  explicitly bounded.
-  `start()` supplies the request ID and discovery mode when omitted.
-- Continue the returned run while `progress.can_continue`, unless the user's goal
-  is already met. A work chunk limits one call, not the whole search. Read
-  `issues()` after errors and use each issue's top-level `code`, `message`, and
-  `retryable` fields. Retry only after the input, authorization, or environment changed.
-- `search_flexible()` already returns the latest comparison. It uses a published
-  20-query, 20-second call budget, not a hidden search cutoff. Continue only if
-  `progress.can_continue` and the user's goal is unmet. Pass `chunk_seconds=None` only
-  with `work_chunk=None` for deliberate synchronous exhaustion. Next call `alternatives()`, choose promising
-  result IDs, and make one `verify()` call for that shortlist.
+- Use `FlightAgent.search(request)` for exact or flexible one-way and round trips. It
+  returns at most four decision rows and keeps full provider evidence outside context.
+  Choose one `candidate_ref`, then call `FlightAgent.verify(search_ref, candidate_ref)`.
+  These are the only operations in the normal agent workflow.
+- Do not manually continue, compare, inspect, or query issues in the normal workflow.
+  The bounded reply states incomplete coverage and whether an environment change is
+  required. Retry only after that change.
+- Treat `observed` prices as shortlist evidence. Only a `confirmed` verification reply
+  proves the selected whole itinerary and final total. Baggage marked `to_verify` is not
+  included evidence.
 - `alternatives()` keeps useful time tradeoffs, including later returns that add
   destination time. Compare the per-journey departure and arrival fields.
 - Call `playbook()` when routing or ticket construction could materially change the

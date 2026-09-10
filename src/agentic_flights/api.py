@@ -594,9 +594,10 @@ class AgentAPI:
         """Discover routes and start a city-agnostic bounded strategy sweep."""
         base = SearchSpec.model_validate(
             {
+                **trip,
                 "request_id": "strategy-template",
                 "search_mode": "discover",
-                **trip,
+                "continuation": None,
             }
         )
         graph = self.discover_route_graph(
@@ -749,8 +750,12 @@ class AgentAPI:
         for index, raw in enumerate(items):
             if not isinstance(raw, dict):
                 raise ValueError(f"searches[{index}] must be a search dictionary")
-            query = {"request_id": str(index), "search_mode": "discover", **raw}
-            query["continuation"] = None
+            query = {
+                **raw,
+                "request_id": str(index),
+                "search_mode": "discover",
+                "continuation": None,
+            }
             specs.append(SearchSpec.model_validate(query))
         config = {
             "searches": [spec.model_dump(mode="json") for spec in specs],
