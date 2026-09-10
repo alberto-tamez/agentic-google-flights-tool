@@ -99,6 +99,8 @@ def test_mcp_errors_can_be_repaired_and_schemas_are_discoverable(tmp_path):
             assert "start" in schemas["operations"] and "issues" in schemas["operations"]
             assert "playbook" in schemas["operations"]
             assert "strategy_plan" in schemas["operations"]
+            assert "discover_route_graph" in schemas["operations"]
+            assert "start_auto_strategy_plan" in schemas["operations"]
             schema = (await c.call_tool("schema", {"topic": "verify"})).structured_content
             assert "result_ids" in schema["input_schema"]["properties"]
             assert schema["input_schema"]["properties"]["work_quotes"]["default"] == 3
@@ -110,6 +112,7 @@ def test_mcp_errors_can_be_repaired_and_schemas_are_discoverable(tmp_path):
             tools = getattr(tools, "tools", tools)
             assert any(t.name == "start" for t in tools)
             assert any(t.name == "strategy_plan" for t in tools)
+            assert any(t.name == "start_auto_strategy_plan" for t in tools)
             tool = next(t for t in tools if t.name == "inspect")
             assert tool.description and "progress" in str(tool.output_schema)
 

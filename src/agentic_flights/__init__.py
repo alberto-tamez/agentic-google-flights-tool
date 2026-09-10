@@ -29,6 +29,7 @@ from agentic_flights.playbook import (
     evaluate_strategy_results,
     list_strategies,
 )
+from agentic_flights.route_sources import AirRoutesClient, RouteSourceError
 
 __all__ = [
     "AgentAPI",
@@ -62,4 +63,6 @@ __all__ = [
     "StrategyHypothesis",
     "build_strategy_plan",
     "evaluate_strategy_results",
+    "AirRoutesClient",
+    "RouteSourceError",
 ]

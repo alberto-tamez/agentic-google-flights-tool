@@ -127,14 +127,26 @@ class RouteGraph(BaseModel):
         return False
 
     def positioning_gateways(
-        self, origin: str, destination: str, max_main_legs: int = 2
+        self,
+        origin: str,
+        destination: str,
+        max_main_legs: int | None = 2,
+        candidate_mode: Literal["path", "reciprocal", "all_outgoing"] = "path",
     ) -> list[str]:
-        if max_main_legs < 1:
+        if max_main_legs is not None and max_main_legs < 1:
             raise ValueError("max_main_legs must be positive")
+        outgoing = self.outgoing(origin) - {destination}
+        if candidate_mode == "all_outgoing":
+            return sorted(outgoing)
+        if candidate_mode == "reciprocal":
+            return sorted(outgoing & self.outgoing(destination))
         return sorted(
             gateway
-            for gateway in self.outgoing(origin)
-            if gateway != destination and self.can_reach(gateway, destination, max_main_legs)
+            for gateway in outgoing
+            if (
+                max_main_legs is None
+                or self.can_reach(gateway, destination, max_main_legs)
+            )
         )
 
     def beyond_destinations(self, destination: str, origin: str) -> list[str]:
@@ -336,7 +348,8 @@ def build_strategy_plan(
     route_graph: dict[str, Any] | None = None,
     auto_positioning: bool = True,
     auto_hidden_city: bool = False,
-    max_gateway_main_legs: int = 2,
+    max_gateway_main_legs: int | None = 2,
+    gateway_candidate_mode: Literal["path", "reciprocal", "all_outgoing"] = "path",
     allow_contract_sensitive: bool = False,
     carry_on_only: bool = False,
 ) -> dict[str, Any]:
@@ -360,7 +373,10 @@ def build_strategy_plan(
         gateways.extend(
             AirportAccess(airport=airport, access_mode="separate_flight")
             for airport in graph.positioning_gateways(
-                base.origin, base.destination, max_gateway_main_legs
+                base.origin,
+                base.destination,
+                max_gateway_main_legs,
+                gateway_candidate_mode,
             )
             if airport not in known_gateways
         )
@@ -523,6 +539,7 @@ def build_strategy_plan(
         "hypotheses": [item.model_dump(mode="json") for item in hypotheses],
         "excluded": excluded,
         "ordering": "unranked",
+        "gateway_candidate_mode": gateway_candidate_mode,
         "route_graph": (
             {
                 "source": graph.source,

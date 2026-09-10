@@ -10,6 +10,10 @@
   graph for any city pair, without hard-coded hub lists or city-specific rules.
 - Execute strategy sweeps in bounded batches and automatically price conservatively
   dated positioning and main tickets for every graph-derived gateway.
+- Load active scheduled destinations from air-routes.com's no-key public API with a
+  seven-day per-airport cache, then validate generated routes against live Google fares.
+- Use a small reciprocal-route gateway pass first and retain an explicit all-outgoing
+  mode for exhaustive, resumable coverage without city-specific pruning.
 - Keep gateway access cost, access time, and disruption buffers separate so agents can
   compare door-to-door value without a hidden composite score.
 - Require carry-on-only travel and a separate return search before producing a

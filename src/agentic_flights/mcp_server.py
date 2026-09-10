@@ -27,6 +27,8 @@ class NextAction(BaseModel):
         "strategy_plan",
         "start_strategy_plan",
         "strategy_results",
+        "discover_route_graph",
+        "start_auto_strategy_plan",
     ]
     arguments: dict[str, Any]
     reason: str | None = None
@@ -159,6 +161,8 @@ def create_server(api: AgentAPI | None = None):
         "strategy_plan",
         "start_strategy_plan",
         "strategy_results",
+        "discover_route_graph",
+        "start_auto_strategy_plan",
     ):
         server.tool(name=name)(_handler(getattr(api, name)))
     return server

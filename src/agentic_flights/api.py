@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect as introspection
 import json
-from typing import Any, get_type_hints
+from typing import Any, Literal, get_type_hints
 
 from pydantic import create_model
 
@@ -140,9 +140,10 @@ def _compare_itineraries(
 
 class AgentAPI:
     def __init__(self, store: ManagedStore | None = None, executor: BatchExecutor | None = None,
-                 on_progress=None):
+                 on_progress=None, route_source=None):
         self.store = store or ManagedStore()
         self.on_progress = on_progress
+        self.route_source = route_source
         self.executor = executor or BatchExecutor(
             FileCache(
                 self.store.provider_cache / "smart",
@@ -329,6 +330,8 @@ class AgentAPI:
             "strategy_plan",
             "start_strategy_plan",
             "strategy_results",
+            "discover_route_graph",
+            "start_auto_strategy_plan",
         )
         if topic in operations:
             method = getattr(self, topic)
@@ -358,6 +361,8 @@ class AgentAPI:
                 "strategy_plan": "trip and candidate airports -> unranked search hypotheses",
                 "start_strategy_plan": "build and execute bounded strategy hypotheses",
                 "strategy_results": "saved strategy run -> door-to-door Pareto frontier",
+                "discover_route_graph": "airport pair -> current finite route graph",
+                "start_auto_strategy_plan": "trip -> route discovery and bounded strategy sweep",
             },
             "schema_topics": [*schemas, *operations],
             "response_contract": "Data responses include run_id, progress, next_actions",
@@ -399,7 +404,8 @@ class AgentAPI:
         route_graph: dict[str, Any] | None = None,
         auto_positioning: bool = True,
         auto_hidden_city: bool = False,
-        max_gateway_main_legs: int = 2,
+        max_gateway_main_legs: int | None = 2,
+        gateway_candidate_mode: Literal["path", "reciprocal", "all_outgoing"] = "path",
         allow_contract_sensitive: bool = False,
         carry_on_only: bool = False,
     ) -> dict[str, Any]:
@@ -416,6 +422,7 @@ class AgentAPI:
             auto_positioning=auto_positioning,
             auto_hidden_city=auto_hidden_city,
             max_gateway_main_legs=max_gateway_main_legs,
+            gateway_candidate_mode=gateway_candidate_mode,
             allow_contract_sensitive=allow_contract_sensitive,
             carry_on_only=carry_on_only,
         )
@@ -430,7 +437,8 @@ class AgentAPI:
         route_graph: dict[str, Any] | None = None,
         auto_positioning: bool = True,
         auto_hidden_city: bool = False,
-        max_gateway_main_legs: int = 2,
+        max_gateway_main_legs: int | None = 2,
+        gateway_candidate_mode: Literal["path", "reciprocal", "all_outgoing"] = "path",
         allow_contract_sensitive: bool = False,
         carry_on_only: bool = False,
         work_chunk: int = 8,
@@ -447,6 +455,7 @@ class AgentAPI:
             auto_positioning=auto_positioning,
             auto_hidden_city=auto_hidden_city,
             max_gateway_main_legs=max_gateway_main_legs,
+            gateway_candidate_mode=gateway_candidate_mode,
             allow_contract_sensitive=allow_contract_sensitive,
             carry_on_only=carry_on_only,
         )
@@ -500,6 +509,68 @@ class AgentAPI:
             "progress": common["progress"],
             "next_actions": common["next_actions"],
         }
+
+    def discover_route_graph(
+        self, origin: str, destination: str, include_beyond: bool = False
+    ) -> dict[str, Any]:
+        """Load current scheduled destinations for automatic strategy planning."""
+        from agentic_flights.route_sources import AirRoutesClient
+
+        self.store.initialize()
+        source = self.route_source or AirRoutesClient(self.store.root / "route-cache")
+        graph = source.build_graph(origin, destination, include_beyond=include_beyond)
+        return {
+            **graph.model_dump(mode="json"),
+            "network_requests": source.network_requests,
+            "cache_hits": source.cache_hits,
+        }
+
+    def start_auto_strategy_plan(
+        self,
+        trip: dict[str, Any],
+        allow_contract_sensitive: bool = False,
+        carry_on_only: bool = False,
+        include_hidden_city: bool = False,
+        gateway_candidate_mode: Literal["reciprocal", "all_outgoing"] = "reciprocal",
+        work_chunk: int = 8,
+        chunk_seconds: float = 20,
+    ) -> dict[str, Any]:
+        """Discover routes and start a city-agnostic bounded strategy sweep."""
+        base = SearchSpec.model_validate(
+            {
+                "request_id": "strategy-template",
+                "search_mode": "discover",
+                **trip,
+            }
+        )
+        graph = self.discover_route_graph(
+            base.origin,
+            base.destination,
+            include_beyond=True,
+        )
+        response = self.start_strategy_plan(
+            trip,
+            route_graph={
+                key: graph[key] for key in ("routes", "source", "observed_at")
+            },
+            auto_positioning=True,
+            auto_hidden_city=include_hidden_city,
+            max_gateway_main_legs=None,
+            gateway_candidate_mode=gateway_candidate_mode,
+            allow_contract_sensitive=allow_contract_sensitive,
+            carry_on_only=carry_on_only,
+            work_chunk=work_chunk,
+            chunk_seconds=chunk_seconds,
+        )
+        response["route_discovery"] = {
+            "source": graph["source"],
+            "observed_at": graph["observed_at"],
+            "routes_loaded": len(graph["routes"]),
+            "network_requests": graph["network_requests"],
+            "cache_hits": graph["cache_hits"],
+            "gateway_candidate_mode": gateway_candidate_mode,
+        }
+        return response
 
     def plan(self, space: dict[str, Any]) -> dict[str, Any]:
         """Validate a flexible trip and save its plan without contacting Google."""

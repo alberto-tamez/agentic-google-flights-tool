@@ -193,6 +193,27 @@ def test_route_graph_search_is_generic() -> None:
     assert graph.positioning_gateways("AAA", "DDD", max_main_legs=2) == ["BBB"]
 
 
+def test_route_graph_supports_staged_and_exhaustive_gateway_modes() -> None:
+    graph = RouteGraph.model_validate(
+        {
+            "source": "test",
+            "observed_at": "2026-09-09",
+            "routes": [
+                {"origin": "AAA", "destination": "BBB"},
+                {"origin": "AAA", "destination": "CCC"},
+                {"origin": "DDD", "destination": "BBB"},
+            ],
+        }
+    )
+
+    assert graph.positioning_gateways(
+        "AAA", "DDD", candidate_mode="reciprocal"
+    ) == ["BBB"]
+    assert graph.positioning_gateways(
+        "AAA", "DDD", candidate_mode="all_outgoing"
+    ) == ["BBB", "CCC"]
+
+
 def test_automatic_strategy_sweep_surfaces_gateway_price_headroom(tmp_path) -> None:
     class Provider:
         def search(self, spec):

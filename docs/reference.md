@@ -82,7 +82,10 @@ Use `api.schema("verify")` or another operation name for its inputs and descript
 no class or source inspection is needed. `schema("operations")` lists all operations.
 
 `api.playbook()` returns the strategy catalog with risk, requirements, and default
-status. `api.strategy_plan()` accepts a normal trip dictionary and a current route graph.
+status. `api.discover_route_graph()` loads the finite active destinations from the
+origin and, when needed, the true destination. The default air-routes.com client uses no
+API key and caches each airport response for seven days. `api.strategy_plan()` accepts
+a normal trip dictionary and that route graph.
 It derives gateways from graph reachability and beyond destinations from outgoing routes;
 explicit airport candidates remain available for ground access and overrides.
 `start_strategy_plan()` executes the bounded component searches, while
@@ -94,6 +97,14 @@ only legacy or manually incomplete access estimates and is not a complete trip p
 Access cost and time remain separate for door-to-door comparison.
 Contract-sensitive hypotheses require an explicit flag; hidden-city generation also
 requires carry-on-only confirmation.
+
+`api.start_auto_strategy_plan()` combines route discovery and the bounded strategy
+sweep. Every airport directly reachable from the true origin becomes a positioning
+candidate; live Google searches test its main and positioning tickets. Set
+`include_hidden_city=True` only after explicit user opt-in and carry-on confirmation.
+The default `gateway_candidate_mode="reciprocal"` intersects routes advertised from the
+origin and destination. `"all_outgoing"` searches every airport directly reachable
+from the origin and is the exhaustive, higher-cost pass.
 
 For an exact trip, call the API without a request file:
 

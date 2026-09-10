@@ -70,13 +70,23 @@ threshold depends on the user's budget, trip length, schedule, and tolerance for
 hassle. Do not use one fixed savings threshold; compare the saving with the added hours.
 
 Call `playbook` when route construction could materially change the result. Pass the
-base trip and a current route graph to `start_strategy_plan`; it derives and executes
+base trip to `start_auto_strategy_plan`; it loads current scheduled destinations, then
+derives and executes
 unranked hypotheses for nearby airports, positioning gateways, mixed one-way tickets,
 and any explicitly enabled contract-sensitive strategy. For graph-derived gateways,
 the sweep prices the main ticket and a conservative positioning ticket dated one day
 outside each end of the main trip. `strategy_results` sums those observed fares but
 keeps the separate-ticket, hotel, and connection caveats. Candidate discovery uses
 graph connectivity, never a permanent or city-specific hub list.
+
+Automatic route discovery uses the public air-routes.com destinations endpoint and a
+seven-day local cache. The source describes passenger routes operating now and includes
+seasonality, but it is not a fare or date-specific availability source. Google fare
+discovery still validates each generated hypothesis for the requested travel date.
+The default reciprocal gateway pass is smaller but can miss asymmetric service. Use
+`gateway_candidate_mode="all_outgoing"` when the user wants exhaustive coverage or the
+first pass finds no satisfactory tradeoff. State that expansion without listing its
+internal search handles.
 
 For positioning, add both access journeys, fares, buffers, baggage handling, possible
 hotels, and separate-ticket disruption risk. Hidden-city searches never run by default.

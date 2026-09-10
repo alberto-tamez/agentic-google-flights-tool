@@ -34,6 +34,18 @@ without city-specific rules. Explicit candidates remain available for ground air
 or manual overrides. The plan is unranked. Ground links, entry rules, and airline
 conditions still need current sources.
 
+`AgentAPI.start_auto_strategy_plan()` obtains that graph from air-routes.com's public
+airport-destinations endpoint. It makes one topology request for ordinary positioning
+and a second for opt-in hidden-city candidates, then caches each airport response for
+seven days. The topology says which passenger routes operate now; live fare discovery
+still tests the requested date because topology is not date-specific availability.
+
+The automatic first pass uses `gateway_candidate_mode="reciprocal"`. It keeps airports
+listed from both the origin and destination, a cheap proxy for service in both
+directions. This can miss asymmetric or one-direction seasonal service. Use
+`gateway_candidate_mode="all_outgoing"` for the exhaustive second pass; bounded work
+chunks checkpoint the much larger set instead of pretending it is free.
+
 The gateway algorithm starts from the finite set of airports directly reachable from
 the true origin. It retains gateway G when the route graph can reach the true destination
 from G within the configured number of flight legs. The bounded sweep prices both the

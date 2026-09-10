@@ -29,10 +29,13 @@ before the first search and update it if it is older. Use `agentic_flights.Agent
 - `alternatives()` keeps useful time tradeoffs, including later returns that add
   destination time. Compare the per-journey departure and arrival fields.
 - Call `playbook()` when routing or ticket construction could materially change the
-  result. Use `start_strategy_plan()` with a current route graph so the program derives
-  gateways from actual connectivity rather than city-specific rules. Explicit airport
-  candidates are only for ground access or manual overrides. Do not invent a universal
-  gateway list or assume that a historically cheap hub is still cheap.
+  result. Use `start_auto_strategy_plan()` so the program loads current scheduled
+  destinations and derives gateways from actual connectivity rather than city-specific
+  rules. Explicit airport candidates are only for ground access or manual overrides.
+  Do not invent a universal gateway list or assume a historically cheap hub is still cheap.
+- Start with reciprocal gateways. If no satisfactory option appears or the user wants
+  exhaustive coverage, repeat with `gateway_candidate_mode="all_outgoing"`. Do not call
+  the reciprocal pass exhaustive.
 - Read `strategy_results()` after the bounded sweep. Route-graph gateways include a
   conservatively dated positioning ticket and the main ticket. Treat the summed fare as
   an observed separate-ticket composite until both tickets and connection logistics are

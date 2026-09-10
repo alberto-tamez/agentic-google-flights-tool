@@ -30,7 +30,7 @@ def test_bundled_skill_keeps_agent_handles_out_of_user_answers() -> None:
     assert "unless the user asks for diagnostics" in skill_text
     assert "verification_satisfied" in skill_text
     assert "strategy_plan()" in skill_text
-    assert "start_strategy_plan()" in skill_text
+    assert "start_auto_strategy_plan()" in skill_text
     assert "strategy_results()" in skill_text
     assert "contract-sensitive strategies off" in skill_text
 

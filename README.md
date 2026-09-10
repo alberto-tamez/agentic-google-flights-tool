@@ -57,6 +57,8 @@ skill unless you pass `--force`.
 - Derive and test unranked positioning gateways from a current route graph, alongside
   nearby arrival airports, mixed one-way tickets, and explicitly enabled
   contract-sensitive searches.
+- Load current scheduled destinations automatically from a cached, no-key public route
+  endpoint; live Google searches still validate the requested travel date and fare.
 - Search for adults, children, and infants, including lap infants.
 - Compare price against travel time, departure hour, and time at the destination
   without mixing different currencies.
