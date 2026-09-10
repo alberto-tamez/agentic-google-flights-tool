@@ -18,6 +18,10 @@
   compare door-to-door value without a hidden composite score.
 - Require carry-on-only travel and a separate return search before producing a
   hidden-city hypothesis; retain operational and contract warnings beside the result.
+- Attach carrier conditions to contract-sensitive playbook entries so agents can check
+  current ticket rules instead of presenting a universal legal claim.
+- Add an explicit, bounded unused-return sweep for one-way trips while keeping every
+  result separate from standard itineraries and off by default.
 
 ## 0.6.8
 

@@ -31,6 +31,7 @@ class FlightStrategy(BaseModel):
     default_enabled: bool
     requirements: list[str] = Field(default_factory=list)
     failure_modes: list[str] = Field(default_factory=list)
+    references: list[str] = Field(default_factory=list)
 
 
 class AirportAccess(BaseModel):
@@ -260,6 +261,7 @@ STRATEGIES = (
         default_enabled=False,
         requirements=["truthful_residency", "accepted_payment_method", "fare_eligibility"],
         failure_modes=["A fare can require local residency, payment, or documentation."],
+        references=["https://www.aa.com/web/i18n/customer-service/support/legal-information.html"],
     ),
     FlightStrategy(
         strategy_id="hidden_city_final_leg",
@@ -283,6 +285,11 @@ STRATEGIES = (
             "Irregular operations can reroute the traveler away from the intended connection.",
             "The airline may apply remedies under its current contract or loyalty rules.",
         ],
+        references=[
+            "https://www.aa.com/i18n/customer-service/support/conditions-of-carriage.html",
+            "https://www.delta.com/us/en/legal/contract-of-carriage-igr",
+            "https://www.lufthansa.com/us/en/terms-and-conditions-lh",
+        ],
     ),
     FlightStrategy(
         strategy_id="throwaway_return",
@@ -295,6 +302,11 @@ STRATEGIES = (
         default_enabled=False,
         requirements=["explicit_user_opt_in", "final_segment_only", "current_airline_terms_review"],
         failure_modes=["Skipping a segment can cancel later travel on the same reservation."],
+        references=[
+            "https://www.aa.com/i18n/customer-service/support/conditions-of-carriage.html",
+            "https://www.delta.com/us/en/legal/contract-of-carriage-igr",
+            "https://www.lufthansa.com/us/en/terms-and-conditions-lh",
+        ],
     ),
     FlightStrategy(
         strategy_id="back_to_back_or_nested_tickets",
@@ -305,6 +317,10 @@ STRATEGIES = (
         default_enabled=False,
         requirements=["explicit_user_opt_in", "current_airline_terms_review"],
         failure_modes=["Overlapping ticket use can conflict with airline contract terms."],
+        references=[
+            "https://www.aa.com/i18n/customer-service/support/conditions-of-carriage.html",
+            "https://www.delta.com/us/en/legal/contract-of-carriage-igr",
+        ],
     ),
     FlightStrategy(
         strategy_id="award_inventory",
@@ -348,6 +364,8 @@ def build_strategy_plan(
     route_graph: dict[str, Any] | None = None,
     auto_positioning: bool = True,
     auto_hidden_city: bool = False,
+    include_throwaway_return: bool = False,
+    throwaway_return_max_nights: int = 14,
     max_gateway_main_legs: int | None = 2,
     gateway_candidate_mode: Literal["path", "reciprocal", "all_outgoing"] = "path",
     allow_contract_sensitive: bool = False,
@@ -361,6 +379,8 @@ def build_strategy_plan(
         "preferred_outbound": None,
     }
     base = SearchSpec.model_validate(raw)
+    if throwaway_return_max_nights < 1:
+        raise ValueError("throwaway_return_max_nights must be positive")
     origins = [AirportAccess.model_validate(item) for item in nearby_origins or []]
     gateways = [AirportAccess.model_validate(item) for item in positioning_origins or []]
     destinations = [AirportAccess.model_validate(item) for item in nearby_destinations or []]
@@ -473,6 +493,37 @@ def build_strategy_plan(
             )
         )
     excluded = []
+    if include_throwaway_return and base.return_date is None and not base.additional_segments:
+        if not allow_contract_sensitive:
+            excluded.append(
+                {
+                    "strategy_id": "throwaway_return",
+                    "reason": "Explicit user opt-in is required for contract-sensitive strategies.",
+                }
+            )
+        else:
+            warnings = next(
+                strategy.failure_modes
+                for strategy in STRATEGIES
+                if strategy.strategy_id == "throwaway_return"
+            )
+            for nights in range(1, throwaway_return_max_nights + 1):
+                hypotheses.append(
+                    _hypothesis(
+                        f"throwaway-return-{nights}",
+                        "throwaway_return",
+                        StrategyRisk.CONTRACT_SENSITIVE,
+                        [
+                            base.model_copy(
+                                update={
+                                    "return_date": base.departure_date + timedelta(days=nights)
+                                }
+                            )
+                        ],
+                        base,
+                        caveats=warnings,
+                    )
+                )
     for index, ticketed_destination in enumerate(beyond):
         reason = _hidden_city_exclusion(base, allow_contract_sensitive, carry_on_only)
         if reason:

@@ -83,6 +83,17 @@ The result must retain these warnings:
 
 The program may detect and explain the price difference. It must never present the
 option with the same confidence or operational safety as a conventional itinerary.
+Carrier rules vary and change. The machine-readable catalog includes current reference
+links for [American](https://www.aa.com/i18n/customer-service/support/conditions-of-carriage.html),
+[Delta](https://www.delta.com/us/en/legal/contract-of-carriage-igr), and
+[Lufthansa](https://www.lufthansa.com/us/en/terms-and-conditions-lh). The agent must
+check the operating and ticketing carriers rather than treating those examples as a
+universal rule.
+
+Unused-return evaluation is also opt-in. For a genuinely one-way trip, the planner can
+compare round-trip fares across a configurable stay horizon. Each result remains in the
+contract-sensitive risk class, and the unused return must be the final segment. The
+default horizon is fourteen nights; changing it changes coverage and must be disclosed.
 
 ## Coverage boundary
 

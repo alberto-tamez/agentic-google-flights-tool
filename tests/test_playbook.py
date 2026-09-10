@@ -68,6 +68,7 @@ def test_hidden_city_requires_opt_in_and_carry_on_only() -> None:
         hidden_city["requirements"]
     )
     assert len(hidden_city["failure_modes"]) >= 4
+    assert len(hidden_city["references"]) >= 3
 
 
 def test_positioning_gateway_keeps_access_cost_and_time_separate() -> None:
@@ -355,3 +356,39 @@ def test_hidden_city_plan_is_opt_in_carry_on_only_and_uses_a_separate_return() -
         "MAD",
         "MEX",
     )
+
+
+def test_throwaway_return_sweep_is_explicit_bounded_and_contract_sensitive() -> None:
+    trip = {
+        "origin": "MEX",
+        "destination": "MAD",
+        "departure_date": "2027-01-14",
+        "currency": "EUR",
+        "language": "es-MX",
+        "country": "MX",
+    }
+    excluded = build_strategy_plan(trip, include_throwaway_return=True)
+    assert excluded["excluded"] == [
+        {
+            "strategy_id": "throwaway_return",
+            "reason": "Explicit user opt-in is required for contract-sensitive strategies.",
+        }
+    ]
+
+    plan = build_strategy_plan(
+        trip,
+        include_throwaway_return=True,
+        throwaway_return_max_nights=3,
+        allow_contract_sensitive=True,
+    )
+    candidates = [
+        item for item in plan["hypotheses"] if item["strategy_id"] == "throwaway_return"
+    ]
+
+    assert len(candidates) == 3
+    assert {item["searches"][0]["return_date"] for item in candidates} == {
+        "2027-01-15",
+        "2027-01-16",
+        "2027-01-17",
+    }
+    assert all(item["risk"] == "contract_sensitive" for item in candidates)
