@@ -2,8 +2,8 @@
 
 ## 0.7.1
 
-- Add the two-operation `FlightAgent` decision contract. Agent replies contain at most
-  four options and 8,192 UTF-8 bytes; full evidence remains in the managed report.
+- Add the two-operation `FlightAgent` decision contract. Compact typed projections use
+  semantic cardinality bounds, while full evidence remains in the managed report.
 - Make the default MCP surface only `search` and `verify`. Developer mode retains the
   legacy diagnostic and batch operations.
 - Preserve baggage as verification intent, centralize whole-itinerary confirmation, and

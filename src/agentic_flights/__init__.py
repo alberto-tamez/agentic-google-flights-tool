@@ -1,6 +1,5 @@
 from agentic_flights.agent import (
     AGENT_CONTRACT,
-    AGENT_REPLY_MAX_BYTES,
     AgentFailureReply,
     AgentRuntimeManifest,
     AgentSearchReply,
@@ -76,7 +75,6 @@ from agentic_flights.strategy_engine import (
 __all__ = [
     "AgentAPI",
     "AGENT_CONTRACT",
-    "AGENT_REPLY_MAX_BYTES",
     "AgentFailureReply",
     "AgentRuntimeManifest",
     "AgentSearchReply",

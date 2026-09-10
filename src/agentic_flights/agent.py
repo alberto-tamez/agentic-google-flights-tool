@@ -11,7 +11,6 @@ from agentic_flights.api import AgentAPI
 from agentic_flights.models import FlightOption, MaxStops, RankedFlight, SearchSpec
 from agentic_flights.views import _result_id, _slim
 
-AGENT_REPLY_MAX_BYTES = 8192
 MAX_DECISION_ROWS = 4
 AGENT_CONTRACT = "flight-decision-v1"
 
@@ -173,10 +172,9 @@ AgentReply = Annotated[
 
 class AgentRuntimeManifest(AgentModel):
     contract: Literal["flight-decision-v1"] = AGENT_CONTRACT
-    capabilities: frozenset[Literal["search", "verify", "bounded_replies"]] = frozenset(
-        {"search", "verify", "bounded_replies"}
+    capabilities: frozenset[Literal["search", "verify", "compact_typed_replies"]] = frozenset(
+        {"search", "verify", "compact_typed_replies"}
     )
-    max_reply_bytes: Literal[8192] = AGENT_REPLY_MAX_BYTES
 
 
 def agent_runtime() -> AgentRuntimeManifest:
@@ -185,8 +183,6 @@ def agent_runtime() -> AgentRuntimeManifest:
 
 def encode_agent_reply(reply: AgentReply) -> str:
     encoded = reply.model_dump_json()
-    if len(encoded.encode()) > AGENT_REPLY_MAX_BYTES:
-        raise ValueError("agent reply exceeds 8192 bytes")
     forbidden = {
         "report",
         "search_spec",

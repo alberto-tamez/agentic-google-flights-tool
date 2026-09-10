@@ -3,7 +3,6 @@
 import json
 
 from agentic_flights.agent import (
-    AGENT_REPLY_MAX_BYTES,
     AgentCoverage,
     AgentSearchReply,
     DecisionJourney,
@@ -59,9 +58,7 @@ def main() -> None:
                 "contract": {
                     "decision_operations": 2,
                     "rows": len(reply.options),
-                    "reply_bytes": len(encoded.encode()),
-                    "reply_byte_limit": AGENT_REPLY_MAX_BYTES,
-                    "within_limit": len(encoded.encode()) <= AGENT_REPLY_MAX_BYTES,
+                    "observed_worst_case_serialized_bytes": len(encoded.encode()),
                 },
             },
             sort_keys=True,
